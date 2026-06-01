@@ -1,0 +1,349 @@
+<?php
+require_once __DIR__ . '/../includes/functions.php';
+$user = requireLogin();
+if ($user['role'] === 'admin' || $user['role'] === 'superadmin') { header('Location: /admin/dashboard.php'); exit; }
+$pageTitle = 'Moje karta';
+$db = db();
+
+$owner = null; $unit = null; $garage = null; $tenant = null;
+if ($user['unit_id']) {
+    $s = $db->prepare('SELECT o.*, u.label AS unit_label, u.type AS unit_type, u.area_m2 FROM owners o JOIN units u ON o.unit_id=u.id WHERE o.unit_id=? LIMIT 1');
+    $s->execute([$user['unit_id']]); $owner = $s->fetch();
+    $s2 = $db->prepare('SELECT * FROM units WHERE id=? LIMIT 1');
+    $s2->execute([$user['unit_id']]); $unit = $s2->fetch();
+    $s3 = $db->prepare("SELECT * FROM units WHERE linked_unit_id=? AND type != 'byt' LIMIT 1");
+    $s3->execute([$user['unit_id']]); $garage = $s3->fetch();
+    $s4 = $db->prepare('SELECT * FROM tenants WHERE unit_id=? ORDER BY created_at DESC LIMIT 1');
+    $s4->execute([$user['unit_id']]); $tenant = $s4->fetch();
+}
+$o = $owner ?? []; $t = $tenant ?? [];
+
+// Změna hesla
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'change_password') {
+    csrfCheck();
+    $current = $_POST['current_password'] ?? ''; $new = $_POST['new_password'] ?? ''; $confirm = $_POST['confirm_password'] ?? '';
+    $stmt = $db->prepare('SELECT password_hash FROM users WHERE id=?'); $stmt->execute([$user['id']]);
+    $hash = $stmt->fetchColumn();
+    if (!password_verify($current, $hash)) flash('Současné heslo není správné.', 'error');
+    elseif (strlen($new) < 6) flash('Nové heslo musí mít alespoň 6 znaků.', 'error');
+    elseif ($new !== $confirm) flash('Nová hesla se neshodují.', 'error');
+    else { $db->prepare('UPDATE users SET password_hash=? WHERE id=?')->execute([password_hash($new, PASSWORD_BCRYPT), $user['id']]); flash('Heslo bylo změněno.', 'success'); }
+    header('Location: /owner/profile.php'); exit;
+}
+
+// Uložit vlastníka
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_owner') {
+    csrfCheck();
+    $data = [
+        'full_name'     => trim($_POST['full_name'] ?? ''),
+        'residence'     => $_POST['residence'] ?? 'neuvedeno',
+        'persons_count' => !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
+        'email'         => trim($_POST['email'] ?? '') ?: null,
+        'email2'        => trim($_POST['email2'] ?? '') ?: null,
+        'primary_email' => (int)($_POST['primary_email'] ?? 1),
+        'phone'         => trim($_POST['phone'] ?? '') ?: null,
+        'phone2'        => trim($_POST['phone2'] ?? '') ?: null,
+        'primary_phone' => (int)($_POST['primary_phone'] ?? 1),
+        'address'       => trim($_POST['address'] ?? '') ?: null,
+        'note'          => trim($_POST['note'] ?? '') ?: null,
+        'gdpr_consent'  => isset($_POST['gdpr_consent']) ? 1 : 0,
+    ];
+    $data['status'] = ownerStatus($data);
+    if (!$data['full_name']) flash('Vyplňte jméno a příjmení.', 'error');
+    elseif (!$data['gdpr_consent']) flash('Pro uložení je nutný souhlas se zpracováním osobních údajů.', 'error');
+    else {
+        if ($owner) {
+            $db->prepare('UPDATE owners SET full_name=?,residence=?,persons_count=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
+               ->execute([$data['full_name'],$data['residence'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
+        } else {
+            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,persons_count,email,email2,primary_email,phone,phone2,primary_phone,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
+        }
+        flash('Vaše karta byla uložena.', 'success');
+    }
+    header('Location: /owner/profile.php'); exit;
+}
+
+// Uložit nájemníka
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_tenant') {
+    csrfCheck();
+    $tname = trim($_POST['t_full_name'] ?? '');
+    $tPersons = !empty($_POST['t_persons_count']) ? (int)$_POST['t_persons_count'] : null;
+    if ($tPersons && $owner) $db->prepare('UPDATE owners SET persons_count=? WHERE id=?')->execute([$tPersons, $owner['id']]);
+    if ($tname && $user['unit_id']) {
+        $tdata = [$tname, trim($_POST['t_email']??'')?: null, trim($_POST['t_email2']??'')?: null, (int)($_POST['t_primary_email']??1), trim($_POST['t_phone']??'')?: null, trim($_POST['t_phone2']??'')?: null, (int)($_POST['t_primary_phone']??1), $_POST['t_rent_from']?: null, $_POST['t_rent_until']?: null, $tPersons];
+        if ($tenant) {
+            $db->prepare('UPDATE tenants SET full_name=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,rent_from=?,rent_until=?,persons_count=? WHERE id=?')
+               ->execute([...$tdata, $tenant['id']]);
+        } else {
+            $db->prepare('INSERT INTO tenants (unit_id,full_name,email,email2,primary_email,phone,phone2,primary_phone,rent_from,rent_until,persons_count) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+               ->execute([$user['unit_id'], ...$tdata]);
+        }
+        flash('Nájemník uložen.', 'success');
+    }
+    header('Location: /owner/profile.php'); exit;
+}
+
+include __DIR__ . '/../includes/header.php';
+?>
+
+<style>
+.profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
+.block{background:#fff;border:2px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.08);overflow:hidden}
+.block-owner{border-top:4px solid #185FA5}
+.block-tenant{border-top:4px solid #3B6D11}
+.block-garage{border-top:4px solid #854F0B}
+.block-owner .edit-form{border-top:3px solid #A8C8E8}
+.block-tenant .edit-form{border-top:3px solid #A8CC88}
+.block-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.25rem;cursor:default}
+.block-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.summary-body{padding:0 1.25rem 1rem}
+.summary-val{font-size:14px;color:var(--text);margin-bottom:4px}
+.edit-form{display:none;padding:1.25rem;background:var(--gray-lt)}
+.edit-form.open{display:block}
+.primary-badge{font-size:10px;background:var(--blue-lt);color:var(--blue);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px}
+.contact-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;background:#fff}
+.contact-box-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+@media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
+</style>
+
+<div class="page-hd">
+  <h1>Moje karta</h1>
+  <?php if ($owner): ?>
+    <span class="badge <?= $owner['status']==='úplná'?'badge-ok':($owner['status']==='neúplná'?'badge-partial':'badge-miss') ?>"><?= e($owner['status']) ?></span>
+  <?php endif; ?>
+</div>
+
+<!-- Info o jednotce -->
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem">
+  <?php if ($unit): ?>
+  <div style="background:var(--blue-lt);border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--blue);font-weight:500">
+    🏠 <strong><?= e($unit['label']) ?></strong> (<?= e($unit['type']) ?>)<?= $unit['area_m2'] ? ' · '.$unit['area_m2'].' m²' : '' ?>
+  </div>
+  <?php endif; ?>
+  <?php if ($garage): ?>
+  <div style="background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--amber);font-weight:500">
+    🚗 Garáž: <strong><?= e($garage['label']) ?></strong><?= $garage['area_m2'] ? ' · '.$garage['area_m2'].' m²' : '' ?>
+  </div>
+  <?php endif; ?>
+</div>
+
+<div class="profile-grid" style="margin-bottom:1.25rem">
+
+  <!-- BLOK VLASTNÍK -->
+  <div class="block block-owner" id="block-owner">
+    <div class="block-header">
+      <span class="block-label">👤 Vlastník</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-owner')">Editovat</button>
+    </div>
+    <div class="summary-body" id="summary-owner">
+      <?php
+        $mainEmail = ($o['primary_email'] ?? 1) == 2 && ($o['email2'] ?? '') ? $o['email2'] : ($o['email'] ?? '');
+        $mainPhone = ($o['primary_phone'] ?? 1) == 2 && ($o['phone2'] ?? '') ? $o['phone2'] : ($o['phone'] ?? '');
+      ?>
+      <?php if ($o): ?>
+        <div class="summary-val"><strong><?= e($o['full_name'] ?? '') ?></strong></div>
+        <?php if ($o['residence'] ?? ''): ?><div class="summary-val" style="color:var(--muted)"><?= e($o['residence']) ?><?= ($o['persons_count'] ?? '') ? ' · '.$o['persons_count'].' os.' : '' ?></div><?php endif; ?>
+        <?php if ($mainEmail): ?><div class="summary-val">✉️ <?= e($mainEmail) ?><?php if (($o['email'] ?? '') && ($o['email2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
+        <?php if ($mainPhone): ?><div class="summary-val">📞 <?= e($mainPhone) ?><?php if (($o['phone'] ?? '') && ($o['phone2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
+        <?php if ($o['address'] ?? ''): ?><div class="summary-val" style="font-size:13px;color:var(--muted)">🏡 <?= e($o['address']) ?></div><?php endif; ?>
+      <?php else: ?>
+        <div style="color:var(--muted);font-size:13px">Karta není vyplněna — klikněte Editovat</div>
+      <?php endif; ?>
+    </div>
+    <div class="edit-form" id="edit-owner">
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+        <input type="hidden" name="action" value="save_owner">
+        <div class="form-group"><label>Jméno a příjmení *</label><input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>"></div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Způsob užívání jednotky</label>
+            <select name="residence">
+              <?php foreach (['trvalé','pronájem','druhé bydliště','neuvedeno'] as $opt): ?>
+                <option value="<?= $opt ?>" <?= ($o['residence']??'neuvedeno')===$opt?'selected':'' ?>><?= $opt ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group"><label>Počet osob</label><input type="number" name="persons_count" min="0" max="20" value="<?= e($o['persons_count'] ?? '') ?>"></div>
+        </div>
+        <div class="contact-box">
+          <div class="contact-box-label">Kontaktní údaje</div>
+          <div class="form-row">
+            <div class="form-group"><label>E-mail 1</label><input type="email" name="email" value="<?= e($o['email'] ?? '') ?>"></div>
+            <div class="form-group"><label>E-mail 2</label><input type="email" name="email2" value="<?= e($o['email2'] ?? '') ?>"></div>
+          </div>
+          <div style="font-size:13px;margin-bottom:.75rem">
+            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
+            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="primary_email" value="1" <?= ($o['primary_email']??1)==1?'checked':'' ?>> E-mail 1</label>
+            <label style="cursor:pointer"><input type="radio" name="primary_email" value="2" <?= ($o['primary_email']??1)==2?'checked':'' ?>> E-mail 2</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Telefon 1</label><input type="tel" name="phone" value="<?= e($o['phone'] ?? '') ?>"></div>
+            <div class="form-group"><label>Telefon 2</label><input type="tel" name="phone2" value="<?= e($o['phone2'] ?? '') ?>"></div>
+          </div>
+          <div style="font-size:13px">
+            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
+            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="primary_phone" value="1" <?= ($o['primary_phone']??1)==1?'checked':'' ?>> Telefon 1</label>
+            <label style="cursor:pointer"><input type="radio" name="primary_phone" value="2" <?= ($o['primary_phone']??1)==2?'checked':'' ?>> Telefon 2</label>
+          </div>
+        </div>
+        <div class="form-group"><label>Korespondenční adresa</label><input type="text" name="address" value="<?= e($o['address'] ?? '') ?>"></div>
+        <div class="form-group"><label>Vzkaz pro výbor</label><textarea name="note" style="min-height:70px"><?= e($o['note'] ?? '') ?></textarea></div>
+        <div class="check-row" style="margin-bottom:1rem">
+          <input type="checkbox" id="gdpr" name="gdpr_consent" required <?= !empty($o['gdpr_consent'])?'checked':'' ?>>
+          <label for="gdpr" style="font-size:13px">Souhlasím se zpracováním osobních údajů (GDPR)</label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="btn btn-primary">Uložit</button>
+          <button type="button" class="btn btn-secondary" onclick="toggleBlock('block-owner')">Zrušit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- BLOK NÁJEMNÍK -->
+  <div class="block block-tenant" id="block-tenant">
+    <div class="block-header">
+      <span class="block-label">🏠 Nájemník</span>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-tenant')">Editovat</button>
+    </div>
+    <div class="summary-body" id="summary-tenant">
+      <?php if ($tenant): ?>
+        <div class="summary-val"><strong><?= e($t['full_name']) ?></strong></div>
+        <?php if ($t['persons_count']): ?><div class="summary-val" style="color:var(--muted)"><?= $t['persons_count'] ?> os.</div><?php endif; ?>
+        <?php $tEmail = ($t['primary_email']??1)==2&&($t['email2']??'')?$t['email2']:($t['email']??''); ?>
+        <?php if ($tEmail): ?><div class="summary-val">✉️ <?= e($tEmail) ?></div><?php endif; ?>
+        <?php $tPhone = ($t['primary_phone']??1)==2&&($t['phone2']??'')?$t['phone2']:($t['phone']??''); ?>
+        <?php if ($tPhone): ?><div class="summary-val">📞 <?= e($tPhone) ?></div><?php endif; ?>
+        <?php if ($t['rent_from']||$t['rent_until']): ?>
+          <div class="summary-val" style="font-size:13px;color:var(--muted)">
+            <?= ($t['rent_from']?'od '.date('j.n.Y',strtotime($t['rent_from'])):'') ?>
+            <?= ($t['rent_until']?' do '.date('j.n.Y',strtotime($t['rent_until'])):'') ?>
+          </div>
+        <?php endif; ?>
+      <?php else: ?>
+        <div style="color:var(--muted);font-size:13px">Žádný nájemník — klikněte Editovat</div>
+      <?php endif; ?>
+    </div>
+    <div class="edit-form" id="edit-tenant">
+      <form method="POST">
+        <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+        <input type="hidden" name="action" value="save_tenant">
+        <div class="form-group"><label>Jméno a příjmení</label><input type="text" name="t_full_name" value="<?= e($t['full_name'] ?? '') ?>"></div>
+        <div class="form-group">
+          <label>Počet osob <span style="color:var(--blue);font-size:11px">(nadřazený)</span></label>
+          <input type="number" name="t_persons_count" min="0" max="20" value="<?= e($t['persons_count'] ?? '') ?>">
+        </div>
+        <div class="contact-box">
+          <div class="contact-box-label">Kontaktní údaje</div>
+          <div class="form-row">
+            <div class="form-group"><label>E-mail 1</label><input type="email" name="t_email" value="<?= e($t['email'] ?? '') ?>"></div>
+            <div class="form-group"><label>E-mail 2</label><input type="email" name="t_email2" value="<?= e($t['email2'] ?? '') ?>"></div>
+          </div>
+          <div style="font-size:13px;margin-bottom:.75rem">
+            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
+            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="t_primary_email" value="1" <?= ($t['primary_email']??1)==1?'checked':'' ?>> E-mail 1</label>
+            <label style="cursor:pointer"><input type="radio" name="t_primary_email" value="2" <?= ($t['primary_email']??1)==2?'checked':'' ?>> E-mail 2</label>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>Telefon 1</label><input type="tel" name="t_phone" value="<?= e($t['phone'] ?? '') ?>"></div>
+            <div class="form-group"><label>Telefon 2</label><input type="tel" name="t_phone2" value="<?= e($t['phone2'] ?? '') ?>"></div>
+          </div>
+          <div style="font-size:13px">
+            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
+            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="t_primary_phone" value="1" <?= ($t['primary_phone']??1)==1?'checked':'' ?>> Telefon 1</label>
+            <label style="cursor:pointer"><input type="radio" name="t_primary_phone" value="2" <?= ($t['primary_phone']??1)==2?'checked':'' ?>> Telefon 2</label>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Nájem od</label><input type="date" name="t_rent_from" value="<?= e($t['rent_from'] ?? '') ?>"></div>
+          <div class="form-group"><label>Nájem do</label><input type="date" name="t_rent_until" value="<?= e($t['rent_until'] ?? '') ?>"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="btn btn-primary">Uložit</button>
+          <button type="button" class="btn btn-secondary" onclick="toggleBlock('block-tenant')">Zrušit</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</div>
+
+<!-- BLOK GARÁŽ (informativní) -->
+<?php if ($garage): ?>
+<?php
+  $garageOwner = $db->prepare('SELECT * FROM owners WHERE unit_id=? LIMIT 1');
+  $garageOwner->execute([$garage['id']]);
+  $garageOwner = $garageOwner->fetch();
+?>
+<div class="block block-garage" style="margin-bottom:1.25rem">
+  <div class="block-header">
+    <span class="block-label">🚗 Garáž <?= e($garage['label']) ?></span>
+  </div>
+  <div class="summary-body">
+    <?php if ($garageOwner && $garageOwner['full_name']): ?>
+      <div class="summary-val"><strong><?= e($garageOwner['full_name']) ?></strong></div>
+      <?php if ($garageOwner['email']): ?><div class="summary-val">✉️ <?= e($garageOwner['email']) ?></div><?php endif; ?>
+    <?php else: ?>
+      <div style="color:var(--muted);font-size:13px">Garáž je příslušenstvím vašeho bytu.</div>
+    <?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- BLOK HESLO -->
+<div class="block" style="max-width:600px;border-top:4px solid #C8C8C8;margin-bottom:1.25rem" id="block-password">
+  <div class="block-header">
+    <span class="block-label">🔒 Změna hesla</span>
+    <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-password')">Změnit</button>
+  </div>
+  <div class="edit-form" id="edit-password">
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+      <input type="hidden" name="action" value="change_password">
+      <div class="form-group">
+        <label>Současné heslo *</label>
+        <div style="position:relative">
+          <input type="password" name="current_password" required id="pw1" style="padding-right:40px">
+          <button type="button" onclick="togglePw('pw1')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted)">👁</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Nové heslo *</label>
+          <div style="position:relative">
+            <input type="password" name="new_password" required minlength="6" id="pw2" style="padding-right:40px">
+            <button type="button" onclick="togglePw('pw2')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted)">👁</button>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Nové heslo znovu *</label>
+          <div style="position:relative">
+            <input type="password" name="confirm_password" required minlength="6" id="pw3" style="padding-right:40px">
+            <button type="button" onclick="togglePw('pw3')" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted)">👁</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button type="submit" class="btn btn-primary">Změnit heslo</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleBlock('block-password')">Zrušit</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleBlock(id) {
+  var block = document.getElementById(id);
+  var editId = 'edit-' + id.replace('block-', '');
+  var edit = document.getElementById(editId);
+  if (edit) edit.classList.toggle('open');
+}
+function togglePw(id) {
+  var i = document.getElementById(id);
+  i.type = i.type === 'password' ? 'text' : 'password';
+}
+</script>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
