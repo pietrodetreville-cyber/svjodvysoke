@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'full_name'     => trim($_POST['full_name'] ?? ''),
         'residence'     => $_POST['residence'] ?? 'neuvedeno',
         'ownership_form'=> $_POST['ownership_form'] ?? 'neuvedeno',
+        'unit_share_pct'=> ($_POST['unit_share_pct'] ?? '') !== '' ? (float)$_POST['unit_share_pct'] : null,
         'persons_count' => !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
         'email'         => trim($_POST['email'] ?? '') ?: null,
         'email_verified'=> isset($_POST['email_verified']) ? 1 : 0,
@@ -96,15 +97,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'gdpr_consent'  => isset($_POST['gdpr_consent']) ? 1 : 0,
     ];
     $data['status'] = ownerStatus($data);
+    if (!in_array($data['ownership_form'], ['podílové', 'společné jmění manželů'])) $data['unit_share_pct'] = null;
     if (!$data['full_name']) flash('Vyplňte jméno a příjmení.', 'error');
     elseif (!$data['gdpr_consent']) flash('Pro uložení je nutný souhlas se zpracováním osobních údajů.', 'error');
     else {
         if ($owner) {
-            $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,persons_count=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
-               ->execute([$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
+            $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,unit_share_pct=?,persons_count=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
+               ->execute([$data['full_name'],$data['residence'],$data['ownership_form'],$data['unit_share_pct'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
         } else {
-            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,ownership_form,persons_count,email,email_verified,notify_email,phone,whatsapp,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
+            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,ownership_form,unit_share_pct,persons_count,email,email_verified,notify_email,phone,whatsapp,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['ownership_form'],$data['unit_share_pct'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
         }
         flash('Vaše karta byla uložena.', 'success');
     }
@@ -123,15 +125,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         trim($_POST['p_phone'] ?? '') ?: null,
         isset($_POST['p_whatsapp']) ? 1 : 0,
         trim($_POST['p_relation'] ?? '') ?: null,
+        ($_POST['p_unit_share_pct'] ?? '') !== '' ? (float)$_POST['p_unit_share_pct'] : null,
         trim($_POST['p_address'] ?? '') ?: null,
         trim($_POST['p_note'] ?? '') ?: null,
     ];
     if ($pdata[0] !== '') {
         if ($pid) {
-            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,relation=?,address=?,note=? WHERE id=? AND owner_id=?')
+            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,relation=?,unit_share_pct=?,address=?,note=? WHERE id=? AND owner_id=?')
                ->execute([...$pdata, $pid, $owner['id']]);
         } else {
-            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,email_verified,notify_email,phone,whatsapp,relation,address,note) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,email_verified,notify_email,phone,whatsapp,relation,unit_share_pct,address,note) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
                ->execute([$owner['id'], ...$pdata]);
         }
         flash('Další vlastník uložen.', 'success');
@@ -238,7 +241,7 @@ include __DIR__ . '/../includes/header.php';
         <?php if ($o['phone'] ?? ''): ?><div class="summary-val">📞 <?= e($o['phone']) ?><?= !empty($o['whatsapp']) ? ' 💬' : '' ?></div><?php endif; ?>
         <?php if ($o['address'] ?? ''): ?><div class="summary-val" style="font-size:13px;color:var(--muted)">🏡 <?= e($o['address']) ?></div><?php endif; ?>
         <?php foreach ($ownerPersons as $p): ?>
-          <div class="summary-val" style="font-size:13px;color:var(--muted)">👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' ('.e($p['relation']).')' : '' ?></div>
+          <div class="summary-val" style="font-size:13px;color:var(--muted)">👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' ('.e($p['relation']).')' : '' ?><?= $p['unit_share_pct'] !== null ? ' — '.e($p['unit_share_pct']).' %' : '' ?></div>
         <?php endforeach; ?>
       <?php else: ?>
         <div style="color:var(--muted);font-size:13px">Karta není vyplněna — klikněte Editovat</div>
@@ -249,10 +252,11 @@ include __DIR__ . '/../includes/header.php';
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="save_owner">
         <div class="form-group"><label>Jméno a příjmení (hlavní vlastník) *</label><input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>"></div>
+        <?php $isSplitOwnership = in_array($o['ownership_form'] ?? 'neuvedeno', ['podílové', 'společné jmění manželů']); ?>
         <div class="form-row">
           <div class="form-group">
             <label>Vlastnictví</label>
-            <select name="ownership_form">
+            <select name="ownership_form" id="ownership-select" onchange="document.getElementById('share-pct-box').style.display = (this.value==='podílové'||this.value==='společné jmění manželů') ? 'block' : 'none'">
               <?php foreach ($ownershipLabels as $val => $lbl): ?>
                 <option value="<?= e($val) ?>" <?= ($o['ownership_form']??'neuvedeno')===$val?'selected':'' ?>><?= e($lbl) ?></option>
               <?php endforeach; ?>
@@ -269,7 +273,10 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="form-row">
           <div class="form-group"><label>Počet osob v jednotce</label><input type="number" name="persons_count" min="0" max="20" value="<?= e($o['persons_count'] ?? '') ?>"></div>
-          <div class="form-group"></div>
+          <div class="form-group" id="share-pct-box" style="display:<?= $isSplitOwnership ? 'block' : 'none' ?>">
+            <label>Můj podíl na jednotce (%)</label>
+            <input type="number" step="0.01" min="0" max="100" name="unit_share_pct" placeholder="50.00" value="<?= e($o['unit_share_pct'] ?? '') ?>">
+          </div>
         </div>
         <div class="contact-box">
           <div class="contact-box-label">Kontaktní údaje</div>
@@ -304,6 +311,7 @@ include __DIR__ . '/../includes/header.php';
           <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-lt);border-radius:var(--radius-sm);padding:.5rem .75rem;margin-bottom:.5rem;font-size:13px">
             <div>
               <strong><?= e($p['full_name']) ?></strong><?= $p['relation'] ? ' — '.e($p['relation']) : '' ?>
+              <?php if ($p['unit_share_pct'] !== null): ?><strong style="color:var(--blue)"> <?= e($p['unit_share_pct']) ?> %</strong><?php endif; ?>
               <?php if ($p['email'] || $p['phone']): ?><br><span style="color:var(--muted)"><?= e($p['email'] ?: '') ?><?= $p['email'] && $p['phone'] ? ' · ' : '' ?><?= e($p['phone'] ?: '') ?></span><?php endif; ?>
             </div>
             <form method="POST" onsubmit="return confirm('Smazat?')">
@@ -329,6 +337,12 @@ include __DIR__ . '/../includes/header.php';
               <div class="form-group"><label>E-mail</label><input type="email" name="p_email"></div>
               <div class="form-group"><label>Telefon</label><input type="tel" name="p_phone"></div>
             </div>
+            <?php if ($isSplitOwnership): ?>
+            <div class="form-group" style="max-width:220px">
+              <label>Podíl na jednotce (%)</label>
+              <input type="number" step="0.01" min="0" max="100" name="p_unit_share_pct" placeholder="50.00">
+            </div>
+            <?php endif; ?>
             <div style="display:flex;gap:1.25rem;font-size:13px;margin-bottom:.5rem">
               <label style="cursor:pointer"><input type="checkbox" name="p_email_verified"> Ověřeno</label>
               <label style="cursor:pointer"><input type="checkbox" name="p_notify_email" checked> E-mail pro informace</label>

@@ -170,7 +170,10 @@ $mainPhone = $owner['phone'];
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:1rem">
       <div style="font-size:28px">👤</div>
       <div>
-        <div style="font-size:18px;font-weight:700"><?= e($owner['full_name'] ?: '—') ?></div>
+        <div style="font-size:18px;font-weight:700">
+          <?= e($owner['full_name'] ?: '—') ?>
+          <?php if ($owner['unit_share_pct'] !== null): ?><span style="font-size:13px;font-weight:600;color:var(--blue)"> — <?= e($owner['unit_share_pct']) ?> %</span><?php endif; ?>
+        </div>
         <div style="font-size:12px;color:var(--muted)">
           Vlastnictví: <strong><?= e($ownershipLabels[$owner['ownership_form'] ?? 'neuvedeno'] ?? $owner['ownership_form']) ?></strong>
           &nbsp;·&nbsp; Způsob užívání: <strong><?= e($owner['residence'] ?: 'neuvedeno') ?></strong>
@@ -187,6 +190,7 @@ $mainPhone = $owner['phone'];
       <?php foreach ($dalsiVlastnici as $p): ?>
         <div style="font-size:13px;margin-bottom:2px">
           👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' — '.e($p['relation']) : '' ?>
+          <?php if ($p['unit_share_pct'] !== null): ?><strong style="color:var(--blue)"> <?= e($p['unit_share_pct']) ?> %</strong><?php endif; ?>
           <?php if ($p['email'] || $p['phone']): ?>
             <span style="color:var(--muted)">(<?= e($p['email'] ?: '') ?><?= $p['email'] && $p['phone'] ? ', ' : '' ?><?= e($p['phone'] ?: '') ?>)</span>
           <?php endif; ?>
