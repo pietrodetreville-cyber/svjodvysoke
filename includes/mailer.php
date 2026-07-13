@@ -313,11 +313,6 @@ function mailTemplatePozvanka(string $title, string $datum, string $misto, strin
 }
 
 function getAllOwnerEmails(\PDO $db): array {
-    $rows = $db->query("SELECT email, email2 FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll();
-    $emails = [];
-    foreach ($rows as $r) {
-        if ($r['email']) $emails[] = $r['email'];
-        if ($r['email2']) $emails[] = $r['email2'];
-    }
-    return array_unique(array_filter($emails));
+    $rows = $db->query("SELECT email FROM owners WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
+    return array_unique(array_filter($rows));
 }

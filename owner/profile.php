@@ -87,11 +87,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'ownership_form'=> $_POST['ownership_form'] ?? 'neuvedeno',
         'persons_count' => !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
         'email'         => trim($_POST['email'] ?? '') ?: null,
-        'email2'        => trim($_POST['email2'] ?? '') ?: null,
-        'primary_email' => (int)($_POST['primary_email'] ?? 1),
+        'email_verified'=> isset($_POST['email_verified']) ? 1 : 0,
+        'notify_email'  => isset($_POST['notify_email']) ? 1 : 0,
         'phone'         => trim($_POST['phone'] ?? '') ?: null,
-        'phone2'        => trim($_POST['phone2'] ?? '') ?: null,
-        'primary_phone' => (int)($_POST['primary_phone'] ?? 1),
+        'whatsapp'      => isset($_POST['whatsapp']) ? 1 : 0,
         'address'       => trim($_POST['address'] ?? '') ?: null,
         'note'          => trim($_POST['note'] ?? '') ?: null,
         'gdpr_consent'  => isset($_POST['gdpr_consent']) ? 1 : 0,
@@ -101,11 +100,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     elseif (!$data['gdpr_consent']) flash('Pro uložení je nutný souhlas se zpracováním osobních údajů.', 'error');
     else {
         if ($owner) {
-            $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,persons_count=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
-               ->execute([$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
+            $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,persons_count=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
+               ->execute([$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
         } else {
-            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,ownership_form,persons_count,email,email2,primary_email,phone,phone2,primary_phone,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
+            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,ownership_form,persons_count,email,email_verified,notify_email,phone,whatsapp,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email_verified'],$data['notify_email'],$data['phone'],$data['whatsapp'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
         }
         flash('Vaše karta byla uložena.', 'success');
     }
@@ -119,17 +118,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $pdata = [
         trim($_POST['p_full_name'] ?? ''),
         trim($_POST['p_email'] ?? '') ?: null,
+        isset($_POST['p_email_verified']) ? 1 : 0,
+        isset($_POST['p_notify_email']) ? 1 : 0,
         trim($_POST['p_phone'] ?? '') ?: null,
+        isset($_POST['p_whatsapp']) ? 1 : 0,
         trim($_POST['p_relation'] ?? '') ?: null,
         trim($_POST['p_address'] ?? '') ?: null,
         trim($_POST['p_note'] ?? '') ?: null,
     ];
     if ($pdata[0] !== '') {
         if ($pid) {
-            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,phone=?,relation=?,address=?,note=? WHERE id=? AND owner_id=?')
+            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,relation=?,address=?,note=? WHERE id=? AND owner_id=?')
                ->execute([...$pdata, $pid, $owner['id']]);
         } else {
-            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,phone,relation,address,note) VALUES (?,?,?,?,?,?,?)')
+            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,email_verified,notify_email,phone,whatsapp,relation,address,note) VALUES (?,?,?,?,?,?,?,?,?,?)')
                ->execute([$owner['id'], ...$pdata]);
         }
         flash('Další vlastník uložen.', 'success');
@@ -152,12 +154,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $tPersons = !empty($_POST['t_persons_count']) ? (int)$_POST['t_persons_count'] : null;
     if ($tPersons && $owner) $db->prepare('UPDATE owners SET persons_count=? WHERE id=?')->execute([$tPersons, $owner['id']]);
     if ($tname && $user['unit_id']) {
-        $tdata = [$tTyp, $tname, trim($_POST['t_email']??'')?: null, trim($_POST['t_email2']??'')?: null, (int)($_POST['t_primary_email']??1), trim($_POST['t_phone']??'')?: null, trim($_POST['t_phone2']??'')?: null, (int)($_POST['t_primary_phone']??1), $_POST['t_rent_from']?: null, $_POST['t_rent_until']?: null, $tPersons];
+        $tdata = [$tTyp, $tname,
+            trim($_POST['t_email']??'')?: null, isset($_POST['t_email_verified']) ? 1 : 0, isset($_POST['t_notify_email']) ? 1 : 0,
+            trim($_POST['t_phone']??'')?: null, isset($_POST['t_whatsapp']) ? 1 : 0,
+            $_POST['t_rent_from']?: null, $_POST['t_rent_until']?: null, $tPersons];
         if ($tenant) {
-            $db->prepare('UPDATE tenants SET typ=?,full_name=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,rent_from=?,rent_until=?,persons_count=? WHERE id=?')
+            $db->prepare('UPDATE tenants SET typ=?,full_name=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,rent_from=?,rent_until=?,persons_count=? WHERE id=?')
                ->execute([...$tdata, $tenant['id']]);
         } else {
-            $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,email2,primary_email,phone,phone2,primary_phone,rent_from,rent_until,persons_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
+            $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,email_verified,notify_email,phone,whatsapp,rent_from,rent_until,persons_count) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
                ->execute([$user['unit_id'], ...$tdata]);
         }
         flash('Uloženo.', 'success');
@@ -226,15 +231,11 @@ include __DIR__ . '/../includes/header.php';
       <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-owner')">Editovat</button>
     </div>
     <div class="summary-body" id="summary-owner">
-      <?php
-        $mainEmail = ($o['primary_email'] ?? 1) == 2 && ($o['email2'] ?? '') ? $o['email2'] : ($o['email'] ?? '');
-        $mainPhone = ($o['primary_phone'] ?? 1) == 2 && ($o['phone2'] ?? '') ? $o['phone2'] : ($o['phone'] ?? '');
-      ?>
       <?php if ($o): ?>
         <div class="summary-val"><strong><?= e($o['full_name'] ?? '') ?></strong></div>
         <?php if ($o['residence'] ?? ''): ?><div class="summary-val" style="color:var(--muted)"><?= e($o['residence']) ?><?= ($o['persons_count'] ?? '') ? ' · '.$o['persons_count'].' os.' : '' ?></div><?php endif; ?>
-        <?php if ($mainEmail): ?><div class="summary-val">✉️ <?= e($mainEmail) ?><?php if (($o['email'] ?? '') && ($o['email2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
-        <?php if ($mainPhone): ?><div class="summary-val">📞 <?= e($mainPhone) ?><?php if (($o['phone'] ?? '') && ($o['phone2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
+        <?php if ($o['email'] ?? ''): ?><div class="summary-val">✉️ <?= e($o['email']) ?><?= !empty($o['email_verified']) ? ' ✓' : '' ?></div><?php endif; ?>
+        <?php if ($o['phone'] ?? ''): ?><div class="summary-val">📞 <?= e($o['phone']) ?><?= !empty($o['whatsapp']) ? ' 💬' : '' ?></div><?php endif; ?>
         <?php if ($o['address'] ?? ''): ?><div class="summary-val" style="font-size:13px;color:var(--muted)">🏡 <?= e($o['address']) ?></div><?php endif; ?>
         <?php foreach ($ownerPersons as $p): ?>
           <div class="summary-val" style="font-size:13px;color:var(--muted)">👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' ('.e($p['relation']).')' : '' ?></div>
@@ -272,23 +273,14 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="contact-box">
           <div class="contact-box-label">Kontaktní údaje</div>
-          <div class="form-row">
-            <div class="form-group"><label>E-mail 1</label><input type="email" name="email" value="<?= e($o['email'] ?? '') ?>"></div>
-            <div class="form-group"><label>E-mail 2</label><input type="email" name="email2" value="<?= e($o['email2'] ?? '') ?>"></div>
+          <div class="form-group"><label>E-mail</label><input type="email" name="email" value="<?= e($o['email'] ?? '') ?>"></div>
+          <div style="font-size:13px;margin-bottom:.75rem;display:flex;gap:1.25rem">
+            <label style="cursor:pointer"><input type="checkbox" name="email_verified" <?= !empty($o['email_verified']) ? 'checked' : '' ?>> Ověřeno</label>
+            <label style="cursor:pointer"><input type="checkbox" name="notify_email" <?= !isset($o['notify_email']) || $o['notify_email'] ? 'checked' : '' ?>> Používat pro odesílání informací</label>
           </div>
-          <div style="font-size:13px;margin-bottom:.75rem">
-            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
-            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="primary_email" value="1" <?= ($o['primary_email']??1)==1?'checked':'' ?>> E-mail 1</label>
-            <label style="cursor:pointer"><input type="radio" name="primary_email" value="2" <?= ($o['primary_email']??1)==2?'checked':'' ?>> E-mail 2</label>
-          </div>
-          <div class="form-row">
-            <div class="form-group"><label>Telefon 1</label><input type="tel" name="phone" value="<?= e($o['phone'] ?? '') ?>"></div>
-            <div class="form-group"><label>Telefon 2</label><input type="tel" name="phone2" value="<?= e($o['phone2'] ?? '') ?>"></div>
-          </div>
+          <div class="form-group"><label>Telefon</label><input type="tel" name="phone" value="<?= e($o['phone'] ?? '') ?>"></div>
           <div style="font-size:13px">
-            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
-            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="primary_phone" value="1" <?= ($o['primary_phone']??1)==1?'checked':'' ?>> Telefon 1</label>
-            <label style="cursor:pointer"><input type="radio" name="primary_phone" value="2" <?= ($o['primary_phone']??1)==2?'checked':'' ?>> Telefon 2</label>
+            <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($o['whatsapp']) ? 'checked' : '' ?>> Používat pro WhatsApp</label>
           </div>
         </div>
         <div class="form-group"><label>Korespondenční adresa</label><input type="text" name="address" value="<?= e($o['address'] ?? '') ?>"></div>
@@ -337,6 +329,11 @@ include __DIR__ . '/../includes/header.php';
               <div class="form-group"><label>E-mail</label><input type="email" name="p_email"></div>
               <div class="form-group"><label>Telefon</label><input type="tel" name="p_phone"></div>
             </div>
+            <div style="display:flex;gap:1.25rem;font-size:13px;margin-bottom:.5rem">
+              <label style="cursor:pointer"><input type="checkbox" name="p_email_verified"> Ověřeno</label>
+              <label style="cursor:pointer"><input type="checkbox" name="p_notify_email" checked> E-mail pro informace</label>
+              <label style="cursor:pointer"><input type="checkbox" name="p_whatsapp"> WhatsApp</label>
+            </div>
             <div class="form-group"><label>Adresa</label><input type="text" name="p_address" placeholder="pokud se liší"></div>
             <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
           </form>
@@ -356,10 +353,8 @@ include __DIR__ . '/../includes/header.php';
       <?php if ($tenant): ?>
         <div class="summary-val"><strong><?= e($t['full_name']) ?></strong></div>
         <?php if ($t['persons_count']): ?><div class="summary-val" style="color:var(--muted)"><?= $t['persons_count'] ?> os.</div><?php endif; ?>
-        <?php $tEmail = ($t['primary_email']??1)==2&&($t['email2']??'')?$t['email2']:($t['email']??''); ?>
-        <?php if ($tEmail): ?><div class="summary-val">✉️ <?= e($tEmail) ?></div><?php endif; ?>
-        <?php $tPhone = ($t['primary_phone']??1)==2&&($t['phone2']??'')?$t['phone2']:($t['phone']??''); ?>
-        <?php if ($tPhone): ?><div class="summary-val">📞 <?= e($tPhone) ?></div><?php endif; ?>
+        <?php if ($t['email'] ?? ''): ?><div class="summary-val">✉️ <?= e($t['email']) ?><?= !empty($t['email_verified']) ? ' ✓' : '' ?></div><?php endif; ?>
+        <?php if ($t['phone'] ?? ''): ?><div class="summary-val">📞 <?= e($t['phone']) ?><?= !empty($t['whatsapp']) ? ' 💬' : '' ?></div><?php endif; ?>
         <?php if ($t['rent_from']||$t['rent_until']): ?>
           <div class="summary-val" style="font-size:13px;color:var(--muted)">
             <?= ($t['rent_from']?'od '.date('j.n.Y',strtotime($t['rent_from'])):'') ?>
@@ -388,23 +383,14 @@ include __DIR__ . '/../includes/header.php';
         </div>
         <div class="contact-box">
           <div class="contact-box-label">Kontaktní údaje</div>
-          <div class="form-row">
-            <div class="form-group"><label>E-mail 1</label><input type="email" name="t_email" value="<?= e($t['email'] ?? '') ?>"></div>
-            <div class="form-group"><label>E-mail 2</label><input type="email" name="t_email2" value="<?= e($t['email2'] ?? '') ?>"></div>
+          <div class="form-group"><label>E-mail</label><input type="email" name="t_email" value="<?= e($t['email'] ?? '') ?>"></div>
+          <div style="font-size:13px;margin-bottom:.75rem;display:flex;gap:1.25rem">
+            <label style="cursor:pointer"><input type="checkbox" name="t_email_verified" <?= !empty($t['email_verified']) ? 'checked' : '' ?>> Ověřeno</label>
+            <label style="cursor:pointer"><input type="checkbox" name="t_notify_email" <?= !isset($t['notify_email']) || $t['notify_email'] ? 'checked' : '' ?>> E-mail pro informace</label>
           </div>
-          <div style="font-size:13px;margin-bottom:.75rem">
-            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
-            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="t_primary_email" value="1" <?= ($t['primary_email']??1)==1?'checked':'' ?>> E-mail 1</label>
-            <label style="cursor:pointer"><input type="radio" name="t_primary_email" value="2" <?= ($t['primary_email']??1)==2?'checked':'' ?>> E-mail 2</label>
-          </div>
-          <div class="form-row">
-            <div class="form-group"><label>Telefon 1</label><input type="tel" name="t_phone" value="<?= e($t['phone'] ?? '') ?>"></div>
-            <div class="form-group"><label>Telefon 2</label><input type="tel" name="t_phone2" value="<?= e($t['phone2'] ?? '') ?>"></div>
-          </div>
+          <div class="form-group"><label>Telefon</label><input type="tel" name="t_phone" value="<?= e($t['phone'] ?? '') ?>"></div>
           <div style="font-size:13px">
-            <span style="color:var(--muted);font-weight:500;margin-right:.5rem">Primární:</span>
-            <label style="cursor:pointer;margin-right:1rem"><input type="radio" name="t_primary_phone" value="1" <?= ($t['primary_phone']??1)==1?'checked':'' ?>> Telefon 1</label>
-            <label style="cursor:pointer"><input type="radio" name="t_primary_phone" value="2" <?= ($t['primary_phone']??1)==2?'checked':'' ?>> Telefon 2</label>
+            <label style="cursor:pointer"><input type="checkbox" name="t_whatsapp" <?= !empty($t['whatsapp']) ? 'checked' : '' ?>> WhatsApp</label>
           </div>
         </div>
         <div class="form-row">

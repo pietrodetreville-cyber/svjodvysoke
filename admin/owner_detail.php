@@ -116,8 +116,8 @@ $badge = match($owner['status']) {
     'neúplná' => 'badge-partial',
     default   => 'badge-miss',
 };
-$mainEmail = ($owner['primary_email'] ?? 1) == 2 && $owner['email2'] ? $owner['email2'] : $owner['email'];
-$mainPhone = ($owner['primary_phone'] ?? 1) == 2 && $owner['phone2'] ? $owner['phone2'] : $owner['phone'];
+$mainEmail = $owner['email'];
+$mainPhone = $owner['phone'];
 ?>
 
 <div class="page-hd">
@@ -197,46 +197,29 @@ $mainPhone = ($owner['primary_phone'] ?? 1) == 2 && $owner['phone2'] ? $owner['p
 
     <!-- Kontakty -->
     <div class="od-contacts">
-      <!-- E-maily -->
+      <!-- E-mail -->
       <div>
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">E-mail</div>
         <?php if ($owner['email']): ?>
-          <div style="font-size:13px;margin-bottom:3px">
-            <?= ($owner['primary_email'] ?? 1) == 1 ? '<strong>✉️' : '✉️' ?>
-            <a href="mailto:<?= e($owner['email']) ?>"><?= e($owner['email']) ?></a>
-            <?= ($owner['primary_email'] ?? 1) == 1 ? '</strong> <span style="font-size:10px;color:var(--green)">hlavní</span>' : '' ?>
+          <div style="font-size:13px">
+            ✉️ <a href="mailto:<?= e($owner['email']) ?>"><?= e($owner['email']) ?></a>
+            <?php if (!empty($owner['email_verified'])): ?><span style="font-size:10px;color:var(--green)">ověřeno</span><?php endif; ?>
+            <?php if (empty($owner['notify_email'])): ?><span style="font-size:10px;color:var(--muted)">(nezasílat info)</span><?php endif; ?>
           </div>
-        <?php endif; ?>
-        <?php if ($owner['email2']): ?>
-          <div style="font-size:13px;color:var(--muted)">
-            <?= ($owner['primary_email'] ?? 1) == 2 ? '<strong>✉️' : '✉️' ?>
-            <a href="mailto:<?= e($owner['email2']) ?>"><?= e($owner['email2']) ?></a>
-            <?= ($owner['primary_email'] ?? 1) == 2 ? '</strong> <span style="font-size:10px;color:var(--green)">hlavní</span>' : '' ?>
-          </div>
-        <?php endif; ?>
-        <?php if (!$owner['email'] && !$owner['email2']): ?>
+        <?php else: ?>
           <span style="color:var(--muted);font-size:13px">—</span>
         <?php endif; ?>
       </div>
 
-      <!-- Telefony -->
+      <!-- Telefon -->
       <div>
         <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">Telefon</div>
         <?php if ($owner['phone']): ?>
-          <div style="font-size:13px;margin-bottom:3px">
-            <?= ($owner['primary_phone'] ?? 1) == 1 ? '<strong>📞' : '📞' ?>
-            <?= e($owner['phone']) ?>
-            <?= ($owner['primary_phone'] ?? 1) == 1 ? '</strong> <span style="font-size:10px;color:var(--green)">hlavní</span>' : '' ?>
+          <div style="font-size:13px">
+            📞 <?= e($owner['phone']) ?>
+            <?php if (!empty($owner['whatsapp'])): ?><span style="font-size:10px;color:var(--green)">💬 WhatsApp</span><?php endif; ?>
           </div>
-        <?php endif; ?>
-        <?php if ($owner['phone2']): ?>
-          <div style="font-size:13px;color:var(--muted)">
-            <?= ($owner['primary_phone'] ?? 1) == 2 ? '<strong>📞' : '📞' ?>
-            <?= e($owner['phone2']) ?>
-            <?= ($owner['primary_phone'] ?? 1) == 2 ? '</strong> <span style="font-size:10px;color:var(--green)">hlavní</span>' : '' ?>
-          </div>
-        <?php endif; ?>
-        <?php if (!$owner['phone'] && !$owner['phone2']): ?>
+        <?php else: ?>
           <span style="color:var(--muted);font-size:13px">—</span>
         <?php endif; ?>
       </div>

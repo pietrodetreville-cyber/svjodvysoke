@@ -28,10 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
         // Rozeslat e-mail
         if ($sendMail) {
             if ($mailTarget === 'all') {
-                $emails = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+                $emails = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
             } else {
                 $in = implode(',', array_map('intval', $selectedIds));
-                $emails = $in ? $db->query("SELECT email FROM owners WHERE id IN ($in) AND email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN) : [];
+                $emails = $in ? $db->query("SELECT email FROM owners WHERE id IN ($in) AND email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN) : [];
             }
             if ($emails) {
                 $link = 'https://odvysoke.drymtym.cz/owner/polls.php';

@@ -56,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_
     $mtg->execute([$mid]);
     $mtg = $mtg->fetch();
     if ($mtg) {
-        $emails = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+        $emails = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
         $body = "Vazeni vlastnici,\n\nvybor SVJ Od Vysoké – Rozhled si Vas dovoluje pozvat na shromazdeni vlastniku.\n\n" .
                 "Nazev: " . $mtg['title'] . "\n" .
                 "Datum: " . date('j. n. Y', strtotime($mtg['meeting_date'])) . ($mtg['meeting_time'] ? ' v '.substr($mtg['meeting_time'],0,5).' hod.' : '') . "\n" .

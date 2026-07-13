@@ -17,8 +17,7 @@ if ($onlyPresent) {
     $s = $db->prepare(
         "SELECT u.label, u.share_numerator, u.share_denominator,
                 ROUND(u.share_numerator/u.share_denominator*100,4) AS share_pct,
-                o.full_name, o.email, o.email2, o.primary_email,
-                o.phone, o.phone2, o.primary_phone,
+                o.full_name, o.email, o.phone,
                 o.persons_count, o.residence,
                 ma.type AS attend_type, ma.proxy_name
          FROM meeting_attendance ma
@@ -34,8 +33,7 @@ if ($onlyPresent) {
     $owners = $db->query(
         "SELECT u.label, u.share_numerator, u.share_denominator,
                 ROUND(u.share_numerator/u.share_denominator*100,4) AS share_pct,
-                o.full_name, o.email, o.email2, o.primary_email,
-                o.phone, o.phone2, o.primary_phone,
+                o.full_name, o.email, o.phone,
                 o.persons_count, o.residence,
                 NULL AS attend_type, NULL AS proxy_name
          FROM units u
@@ -56,9 +54,7 @@ if ($format === 'csv') {
     fputcsv($out, ['Č.','Jednotka','Vlastník','E-mail','Telefon','Počet osob','Přítomen/Zmocněnec','Podpis','Poznámka'], ';');
     $i = 1;
     foreach ($owners as $o) {
-        $mainEmail = ($o['primary_email']??1)==2&&$o['email2'] ? $o['email2'] : ($o['email']??'');
-        $mainPhone = ($o['primary_phone']??1)==2&&$o['phone2'] ? $o['phone2'] : ($o['phone']??'');
-        fputcsv($out, [$i, $o['label'], $o['full_name']??'', $mainEmail, $mainPhone, $o['persons_count']??'','','',''], ';');
+        fputcsv($out, [$i, $o['label'], $o['full_name']??'', $o['email']??'', $o['phone']??'', $o['persons_count']??'','','',''], ';');
         fputcsv($out, ['','','↑ oprava','','','','','',''], ';');
         $i++;
     }
@@ -167,8 +163,8 @@ tfoot td { background: #1F497D; color: #fff; font-weight: bold; font-size: 8pt; 
 $totalPct = 0;
 $i = 1;
 foreach ($owners as $o):
-    $mainEmail = ($o['primary_email']??1)==2&&$o['email2'] ? $o['email2'] : ($o['email']??'');
-    $mainPhone = ($o['primary_phone']??1)==2&&$o['phone2'] ? $o['phone2'] : ($o['phone']??'');
+    $mainEmail = $o['email'] ?? '';
+    $mainPhone = $o['phone'] ?? '';
     $totalPct += (float)$o['share_pct'];
 ?>
     <tr class="data-row">

@@ -60,22 +60,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
         if ($sendMail) {
             $emails = [];
             if ($mailTarget === 'all') {
-                // Oba emaily - hlavní i druhý
-                $rows = $db->query("SELECT email, email2 FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll();
-                $emails = [];
-                foreach ($rows as $r) {
-                    if ($r['email']) $emails[] = $r['email'];
-                    if ($r['email2']) $emails[] = $r['email2'];
-                }
-                $emails = array_unique(array_filter($emails));
+                $emails = $db->query("SELECT email FROM owners WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
             } else {
                 // Skupiny
                 if (!empty($_POST['group_all_owners'])) {
-                    $e = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+                    $e = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
                     $emails = array_merge($emails, $e);
                 }
                 if (!empty($_POST['group_tenants'])) {
-                    $e = $db->query("SELECT DISTINCT email FROM tenants WHERE email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+                    $e = $db->query("SELECT DISTINCT email FROM tenants WHERE email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
                     $emails = array_merge($emails, $e);
                 }
                 // Majitelé garáží
@@ -84,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
                         "SELECT DISTINCT o.email FROM owners o
                          JOIN units u ON o.unit_id=u.id
                          JOIN units g ON g.linked_unit_id=u.id
-                         WHERE g.type != 'byt' AND o.email IS NOT NULL AND o.email != ''"
+                         WHERE g.type != 'byt' AND o.email IS NOT NULL AND o.email != '' AND o.notify_email = 1"
                     )->fetchAll(PDO::FETCH_COLUMN);
                     $emails = array_merge($emails, $e);
                 }
@@ -93,14 +86,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($_POST['action'] ?? '', ['
                 $selectedIds = $_POST['selected_owners'] ?? [];
                 if ($selectedIds) {
                     $in = implode(',', array_map('intval', $selectedIds));
-                    $e = $db->query("SELECT email FROM owners WHERE id IN ($in) AND email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+                    $e = $db->query("SELECT email FROM owners WHERE id IN ($in) AND email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
                     $emails = array_merge($emails, $e);
                 }
                 // Jednotlivci - nájemníci
                 $selectedTenants = $_POST['selected_tenants'] ?? [];
                 if ($selectedTenants) {
                     $in = implode(',', array_map('intval', $selectedTenants));
-                    $e = $db->query("SELECT email FROM tenants WHERE id IN ($in) AND email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
+                    $e = $db->query("SELECT email FROM tenants WHERE id IN ($in) AND email IS NOT NULL AND email != '' AND notify_email = 1")->fetchAll(PDO::FETCH_COLUMN);
                     $emails = array_merge($emails, $e);
                 }
                 $emails = array_unique(array_filter($emails));

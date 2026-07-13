@@ -189,17 +189,12 @@ include __DIR__ . '/../includes/header.php';
         <?php endif; ?>
       </td>
       <td style="font-size:13px">
-        <?php
-          $mainEmail = ($r['primary_email'] ?? 1) == 2 && $r['email2'] ? $r['email2'] : $r['email'];
-          $hasExtra = $r['email2'] && $r['email'];
-        ?>
-        <?= $mainEmail ? '<a href="mailto:'.e($mainEmail).'">'.e($mainEmail).'</a>' : '<span style="color:var(--muted)">–</span>' ?>
-        <?php if ($hasExtra): ?><span style="font-size:10px;color:var(--muted)"> +1</span><?php endif; ?>
+        <?= $r['email'] ? '<a href="mailto:'.e($r['email']).'">'.e($r['email']).'</a>' : '<span style="color:var(--muted)">–</span>' ?>
+        <?php if (!empty($r['email_verified'])): ?><span style="font-size:10px;color:var(--green)"> ✓</span><?php endif; ?>
       </td>
       <td style="font-size:13px;white-space:nowrap">
-        <?php $mainPhone = ($r['primary_phone'] ?? 1) == 2 && $r['phone2'] ? $r['phone2'] : $r['phone']; ?>
-        <?= e($mainPhone ?: '–') ?>
-        <?php if ($r['phone2'] && $r['phone']): ?><span style="font-size:10px;color:var(--muted)"> +1</span><?php endif; ?>
+        <?= e($r['phone'] ?: '–') ?>
+        <?php if (!empty($r['whatsapp'])): ?><span style="font-size:10px;color:var(--green)"> 💬</span><?php endif; ?>
       </td>
       <td style="text-align:center;font-size:13px">
         <?= $r['persons_count'] ? '<span style="font-weight:600">'.$r['persons_count'].'</span><span style="color:var(--muted);font-size:11px"> os.</span>' : '<span style="color:var(--muted)">–</span>' ?>

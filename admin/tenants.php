@@ -13,11 +13,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     $typ    = in_array($_POST['typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['typ'] : 'najem';
     if ($unitId && $name) {
         $db->prepare(
-            'INSERT INTO tenants (unit_id,typ,full_name,email,phone,rent_from,rent_until,persons_count,note) VALUES (?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO tenants (unit_id,typ,full_name,email,email_verified,notify_email,phone,whatsapp,rent_from,rent_until,persons_count,note) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $unitId, $typ, $name,
             trim($_POST['email'] ?? '') ?: null,
+            isset($_POST['email_verified']) ? 1 : 0,
+            isset($_POST['notify_email']) ? 1 : 0,
             trim($_POST['phone'] ?? '') ?: null,
+            isset($_POST['whatsapp']) ? 1 : 0,
             $_POST['rent_from'] ?: null,
             $_POST['rent_until'] ?: null,
             !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
@@ -33,12 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit'
     csrfCheck();
     $typ = in_array($_POST['typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['typ'] : 'najem';
     $db->prepare(
-        'UPDATE tenants SET unit_id=?,typ=?,full_name=?,email=?,phone=?,rent_from=?,rent_until=?,persons_count=?,note=? WHERE id=?'
+        'UPDATE tenants SET unit_id=?,typ=?,full_name=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,rent_from=?,rent_until=?,persons_count=?,note=? WHERE id=?'
     )->execute([
         (int)$_POST['unit_id'], $typ,
         trim($_POST['full_name']),
         trim($_POST['email'] ?? '') ?: null,
+        isset($_POST['email_verified']) ? 1 : 0,
+        isset($_POST['notify_email']) ? 1 : 0,
         trim($_POST['phone'] ?? '') ?: null,
+        isset($_POST['whatsapp']) ? 1 : 0,
         $_POST['rent_from'] ?: null,
         $_POST['rent_until'] ?: null,
         !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
@@ -139,6 +145,11 @@ include __DIR__ . '/../includes/header.php';
         <input type="tel" name="phone" value="<?= e($editing['phone'] ?? '') ?>">
       </div>
     </div>
+    <div style="display:flex;gap:1.25rem;font-size:13px;margin-bottom:1rem">
+      <label style="cursor:pointer"><input type="checkbox" name="email_verified" <?= !empty($editing['email_verified']) ? 'checked' : '' ?>> E-mail ověřen</label>
+      <label style="cursor:pointer"><input type="checkbox" name="notify_email" <?= !isset($editing['notify_email']) || $editing['notify_email'] ? 'checked' : '' ?>> E-mail pro informace</label>
+      <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($editing['whatsapp']) ? 'checked' : '' ?>> WhatsApp</label>
+    </div>
 
     <div class="form-row">
       <div class="form-group">
@@ -204,8 +215,8 @@ include __DIR__ . '/../includes/header.php';
         <?= e($t['full_name']) ?>
         <?php if ($t['note']): ?><br><small style="color:var(--muted)"><?= e($t['note']) ?></small><?php endif; ?>
       </td>
-      <td style="font-size:13px"><?= $t['email'] ? '<a href="mailto:'.e($t['email']).'">'.e($t['email']).'</a>' : '–' ?></td>
-      <td style="font-size:13px;white-space:nowrap"><?= e($t['phone'] ?: '–') ?></td>
+      <td style="font-size:13px"><?= $t['email'] ? '<a href="mailto:'.e($t['email']).'">'.e($t['email']).'</a>'.(!empty($t['email_verified']) ? ' ✓' : '') : '–' ?></td>
+      <td style="font-size:13px;white-space:nowrap"><?= e($t['phone'] ?: '–') ?><?= !empty($t['whatsapp']) ? ' 💬' : '' ?></td>
       <td style="text-align:center"><?= $t['persons_count'] ?? '–' ?></td>
       <td style="font-size:13px"><?= $t['rent_from'] ? date('j. n. Y', strtotime($t['rent_from'])) : '–' ?></td>
       <td style="font-size:13px">
