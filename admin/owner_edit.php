@@ -146,12 +146,19 @@ include __DIR__ . '/../includes/header.php';
 $o = $owner ?? [];
 ?>
 
+<style>
+.owner-edit-grid { display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; align-items:start; }
+@media(max-width:900px){ .owner-edit-grid{ grid-template-columns:1fr; } }
+</style>
+
 <div class="page-hd">
   <h1><?= $owner ? 'Upravit kartu vlastníka' : 'Přidat vlastníka' ?></h1>
   <a class="btn btn-secondary" href="/admin/owners.php">← Zpět</a>
 </div>
 
-<div class="card" style="max-width:640px">
+<div class="owner-edit-grid">
+
+<div class="card">
 <form method="POST">
   <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
   <input type="hidden" name="action" value="save_owner">
@@ -329,7 +336,7 @@ $o = $owner ?? [];
 
 <?php if ($owner): ?>
 <!-- ══ DALŠÍ VLASTNÍCI (SJM / podílové) ═══════════════════════════════════ -->
-<div class="card" id="dalsi-vlastnici" style="max-width:640px;margin-top:1.25rem;border-top:4px solid var(--blue)">
+<div class="card" id="dalsi-vlastnici" style="border-top:4px solid var(--blue)">
   <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:.25rem">👥 Další vlastníci</div>
   <p style="font-size:12px;color:var(--muted);margin-bottom:1rem">
     Použijte u SJM (manžel/ka) nebo podílového vlastnictví (další spoluvlastníci). Hlavní vlastník zůstává ve formuláři výše.
@@ -439,6 +446,12 @@ $o = $owner ?? [];
     </form>
   </details>
 </div>
+<?php else: ?>
+<div class="card" style="border-top:4px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;text-align:center;min-height:120px">
+  Další vlastníky (SJM / podílové) půjde přidat po uložení karty.
+</div>
 <?php endif; ?>
+
+</div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
