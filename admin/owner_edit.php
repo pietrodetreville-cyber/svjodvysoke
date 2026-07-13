@@ -104,14 +104,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     header('Location: /admin/owner_edit.php?id=' . $owner['id'] . '#dalsi-vlastnici'); exit;
 }
 
-// Rychlé přidání nájemníka (zobrazí se jen když je způsob užívání = pronájem)
+// Rychlé přidání nájemníka / osoby s věcným břemenem (zobrazí se, když způsob užívání = pronájem nebo věcné břemeno)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_tenant_inline' && $owner) {
     csrfCheck();
     $tname = trim($_POST['t_full_name'] ?? '');
+    $tTyp  = in_array($_POST['t_typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['t_typ'] : 'najem';
     if ($tname) {
-        $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,phone) VALUES (?,?,?,?,?)')
-           ->execute([$owner['unit_id'], 'najem', $tname, trim($_POST['t_email'] ?? '') ?: null, trim($_POST['t_phone'] ?? '') ?: null]);
-        flash('Nájemník přidán. Další údaje (nájem od/do, počet osob) doplňte v Uživatelích jednotky.', 'success');
+        $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,notify_email,phone,whatsapp) VALUES (?,?,?,?,?,?,?)')
+           ->execute([
+               $owner['unit_id'], $tTyp, $tname,
+               trim($_POST['t_email'] ?? '') ?: null, isset($_POST['t_notify_email']) ? 1 : 0,
+               trim($_POST['t_phone'] ?? '') ?: null, isset($_POST['t_whatsapp']) ? 1 : 0,
+           ]);
+        flash('Uloženo. Další údaje (nájem od/do, počet osob) doplňte v Uživatelích jednotky.', 'success');
     }
     header('Location: /admin/owner_edit.php?id=' . $owner['id']); exit;
 }
@@ -126,10 +131,11 @@ if ($owner) {
     if (isset($_GET['edit_person'])) {
         foreach ($ownerPersons as $pp) if ((int)$pp['id'] === (int)$_GET['edit_person']) { $editPerson = $pp; break; }
     }
-    $tstmt = $db->prepare("SELECT * FROM tenants WHERE unit_id=? AND typ='najem' ORDER BY full_name");
+    $tstmt = $db->prepare("SELECT * FROM tenants WHERE unit_id=? ORDER BY full_name");
     $tstmt->execute([$owner['unit_id']]);
     $unitTenants = $tstmt->fetchAll();
 }
+$usageTypLabels = ['najem' => 'Nájem', 'vecne_bremeno' => 'Věcné břemeno'];
 
 $ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
 
@@ -170,7 +176,7 @@ $o = $owner ?? [];
     </div>
     <div class="form-group">
       <label>Způsob užívání</label>
-      <select name="residence" id="residence-select" onchange="document.getElementById('pronajem-box').style.display = this.value==='pronájem' ? 'block' : 'none'">
+      <select name="residence" id="residence-select" onchange="toggleUsageBox(this.value)">
         <?php foreach (['vlastní','pronájem','věcné břemeno','neuvedeno'] as $opt): ?>
           <option value="<?= $opt ?>" <?= ($o['residence'] ?? '') === $opt ? 'selected' : '' ?>><?= $opt ?></option>
         <?php endforeach; ?>
@@ -178,32 +184,48 @@ $o = $owner ?? [];
     </div>
   </div>
 
-  <div id="pronajem-box" style="display:<?= ($o['residence'] ?? '') === 'pronájem' ? 'block' : 'none' ?>;border:1px solid #A8CC88;background:#EAF3DE;border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem">
-    <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:.5rem">🏠 Nájemníci</div>
+  <?php $showUsageBox = in_array($o['residence'] ?? '', ['pronájem','věcné břemeno']); ?>
+  <div id="pronajem-box" style="display:<?= $showUsageBox ? 'block' : 'none' ?>;border:1px solid #A8CC88;background:#EAF3DE;border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem">
+    <div style="font-size:13px;font-weight:600;color:var(--green);margin-bottom:.5rem">🏠 Nájemníci / osoby s věcným břemenem</div>
     <?php if ($unitTenants): ?>
       <?php foreach ($unitTenants as $ut): ?>
         <div style="font-size:13px;margin-bottom:4px">
           <?= e($ut['full_name']) ?>
+          <span class="badge <?= $ut['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>" style="font-size:10px"><?= e($usageTypLabels[$ut['typ']] ?? $ut['typ']) ?></span>
           <?php if ($ut['email'] || $ut['phone']): ?><span style="color:var(--muted)">— <?= e($ut['email'] ?: '') ?><?= $ut['email'] && $ut['phone'] ? ', ' : '' ?><?= e($ut['phone'] ?: '') ?></span><?php endif; ?>
+          <?php if (!empty($ut['notify_email'])): ?><span style="font-size:10px;color:var(--green)">✉️ info</span><?php endif; ?>
+          <?php if (!empty($ut['whatsapp'])): ?><span style="font-size:10px;color:var(--green)">💬 WA</span><?php endif; ?>
         </div>
       <?php endforeach; ?>
       <a href="/admin/tenants.php" style="font-size:12px" class="btn btn-secondary btn-sm">Spravovat v Uživatelích jednotky</a>
     <?php else: ?>
-      <p style="font-size:12px;color:var(--muted);margin-bottom:.5rem">Zatím žádný nájemník u této jednotky.</p>
+      <p style="font-size:12px;color:var(--muted);margin-bottom:.5rem" id="usage-empty-msg">Zatím žádný záznam u této jednotky.</p>
       <?php if ($owner): ?>
       <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="save_tenant_inline">
+        <input type="hidden" name="t_typ" id="usage-typ-field" value="<?= ($o['residence'] ?? '') === 'věcné břemeno' ? 'vecne_bremeno' : 'najem' ?>">
         <div class="form-group" style="margin:0;min-width:160px"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
         <div class="form-group" style="margin:0;min-width:160px"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
         <div class="form-group" style="margin:0;min-width:140px"><label style="font-size:11px">Telefon</label><input type="tel" name="t_phone"></div>
-        <button type="submit" class="btn btn-primary btn-sm">Přidat nájemníka</button>
+        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_notify_email" checked> odesílat e-mail info</label>
+        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_whatsapp"> WhatsApp</label>
+        <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
       </form>
       <?php else: ?>
-      <p style="font-size:12px;color:var(--muted)">Nejdřív uložte kartu vlastníka, pak půjde přidat nájemníka rovnou zde.</p>
+      <p style="font-size:12px;color:var(--muted)">Nejdřív uložte kartu vlastníka, pak půjde přidat záznam rovnou zde.</p>
       <?php endif; ?>
     <?php endif; ?>
   </div>
+
+  <script>
+  function toggleUsageBox(val) {
+    var show = (val === 'pronájem' || val === 'věcné břemeno');
+    document.getElementById('pronajem-box').style.display = show ? 'block' : 'none';
+    var typField = document.getElementById('usage-typ-field');
+    if (typField) typField.value = (val === 'věcné břemeno') ? 'vecne_bremeno' : 'najem';
+  }
+  </script>
 
   <div class="form-row">
     <div class="form-group">
