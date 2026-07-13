@@ -85,6 +85,21 @@ CREATE TABLE IF NOT EXISTS poll_votes (
   FOREIGN KEY (unit_id) REFERENCES units(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Spotřeby (studená/teplá voda, teplo – import z Techem)
+CREATE TABLE IF NOT EXISTS consumption (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT NOT NULL,
+  rok SMALLINT NOT NULL,
+  mesic TINYINT NOT NULL,
+  typ ENUM('SV','TV','ITN') NOT NULL,
+  jednotka VARCHAR(10) NOT NULL,
+  hodnota_zacatek DECIMAL(10,3) NULL,
+  hodnota_konec DECIMAL(10,3) NULL,
+  spotreba DECIMAL(10,3) NOT NULL,
+  UNIQUE KEY one_reading (unit_id, rok, mesic, typ),
+  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Výchozí admin účet (heslo: Admin1234 – změňte po prvním přihlášení!)
 INSERT INTO users (username, password_hash, role)
 VALUES ('vybor', '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uSlKkBa.W', 'admin');

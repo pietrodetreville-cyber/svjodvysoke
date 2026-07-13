@@ -18,6 +18,53 @@ if ($user['unit_id']) {
 }
 $o = $owner ?? []; $t = $tenant ?? [];
 
+// ── Technický popis jednotky ──────────────────────────────────────────────
+$unit_rooms_data = [];
+$unit_eq_data    = [];
+$unit_info       = null;
+if ($user['unit_id']) {
+    try {
+        $uq = $db->prepare("SELECT np, dispozice, vymera_m2, vymera_pozn FROM units WHERE id=?");
+        $uq->execute([$user['unit_id']]);
+        $unit_info = $uq->fetch();
+        $rq = $db->prepare("SELECT nazev, vymera_m2, poznamka FROM unit_rooms WHERE unit_id=? ORDER BY order_num, id");
+        $rq->execute([$user['unit_id']]);
+        $unit_rooms_data = $rq->fetchAll();
+        $eq = $db->prepare("SELECT polozka, pocet, poznamka FROM unit_equipment WHERE unit_id=? ORDER BY order_num, id");
+        $eq->execute([$user['unit_id']]);
+        $unit_eq_data = $eq->fetchAll();
+    } catch (\PDOException $e) {}
+}
+$npLabels = [1=>'1. NP (přízemí)',2=>'2. NP (1. patro)',3=>'3. NP (2. patro)',4=>'4. NP (3. patro)',5=>'5. NP (4. patro)',6=>'6. NP (5. patro)',7=>'7. NP (6. patro)',8=>'8. NP (7. patro)'];
+
+// ── Spotřeby ──────────────────────────────────────────────────────────────
+$cons_roky = [];
+$cons_rows = [];
+if ($user['unit_id']) {
+    try {
+        $q1 = $db->prepare("SELECT DISTINCT rok FROM consumption WHERE unit_id = ? ORDER BY rok DESC");
+        $q1->execute([$user['unit_id']]);
+        $cons_roky = $q1->fetchAll(PDO::FETCH_COLUMN);
+    } catch (\PDOException $e) {
+        $cons_roky = [];
+    }
+}
+// Výchozí rok = z URL, nebo nejnovější s daty, nebo aktuální rok
+$cons_rok = (int)($_GET['cons_rok'] ?? ($cons_roky[0] ?? (int)date('Y')));
+if ($user['unit_id']) {
+    try {
+        $q2 = $db->prepare("SELECT rok, mesic, typ, jednotka, hodnota_zacatek, hodnota_konec, spotreba FROM consumption WHERE unit_id = ? AND rok = ? ORDER BY mesic ASC, typ ASC");
+        $q2->execute([$user['unit_id'], $cons_rok]);
+        $cons_rows = $q2->fetchAll(PDO::FETCH_ASSOC);
+    } catch (\PDOException $e) {
+        $cons_rows = [];
+    }
+}
+$cons_mesice = [1=>'Leden',2=>'Únor',3=>'Březen',4=>'Duben',5=>'Květen',6=>'Červen',7=>'Červenec',8=>'Srpen',9=>'Září',10=>'Říjen',11=>'Listopad',12=>'Prosinec'];
+$cons_pivot  = [];
+$cons_soucty = ['SV'=>0,'TV'=>0,'ITN'=>0];
+foreach ($cons_rows as $r) { $cons_pivot[$r['mesic']][$r['typ']] = $r; $cons_soucty[$r['typ']] += $r['spotreba']; }
+
 // Změna hesla
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'change_password') {
     csrfCheck();
@@ -289,6 +336,151 @@ include __DIR__ . '/../includes/header.php';
       <div style="color:var(--muted);font-size:13px">Garáž je příslušenstvím vašeho bytu.</div>
     <?php endif; ?>
   </div>
+</div>
+<?php endif; ?>
+
+<!-- BLOK TECHNICKÝ POPIS JEDNOTKY -->
+<?php if ($unit_info && ($unit_info['dispozice'] || $unit_rooms_data || $unit_eq_data)): ?>
+<div class="block" style="border-top:4px solid var(--blue);margin-bottom:1.25rem">
+  <div class="block-header" style="cursor:default">
+    <span class="block-label">🏠 Technický popis jednotky</span>
+    <?php if ($unit_info['dispozice'] || $unit_info['vymera_m2']): ?>
+    <span style="font-size:13px;color:var(--muted)">
+      <?= e($unit_info['dispozice'] ?? '') ?>
+      <?= $unit_info['vymera_m2'] ? '&nbsp;·&nbsp;'.$unit_info['vymera_m2'].' m²' : '' ?>
+      <?= $unit_info['np'] ? '&nbsp;·&nbsp;'.($npLabels[$unit_info['np']] ?? $unit_info['np'].'. NP') : '' ?>
+    </span>
+    <?php endif; ?>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;padding:0 1.25rem 1.25rem">
+
+    <!-- Místnosti -->
+    <?php if ($unit_rooms_data): ?>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--green);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🚪 Místnosti</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <?php foreach ($unit_rooms_data as $r): ?>
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:4px 0"><?= e($r['nazev']) ?></td>
+          <td style="text-align:right;font-weight:600;padding:4px 0;color:var(--green)">
+            <?= $r['vymera_m2'] !== null ? number_format($r['vymera_m2'], 2, ',', ' ').' m²' : '' ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        <?php $tv = array_sum(array_column($unit_rooms_data, 'vymera_m2')); if ($tv > 0): ?>
+        <tr style="font-weight:700;background:var(--gray-lt)">
+          <td style="padding:5px 0">Celkem</td>
+          <td style="text-align:right;padding:5px 0;color:var(--green)"><?= number_format($tv, 2, ',', ' ') ?> m²</td>
+        </tr>
+        <?php endif; ?>
+      </table>
+    </div>
+    <?php endif; ?>
+
+    <!-- Vybavení -->
+    <?php if ($unit_eq_data): ?>
+    <div>
+      <div style="font-size:12px;font-weight:600;color:var(--amber);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.5rem">🔧 Vybavení</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <?php foreach ($unit_eq_data as $eq): ?>
+        <tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:4px 0"><?= e($eq['polozka']) ?></td>
+          <td style="text-align:right;font-weight:600;padding:4px 0;color:var(--amber)"><?= $eq['pocet'] ?> ks</td>
+        </tr>
+        <?php endforeach; ?>
+      </table>
+    </div>
+    <?php endif; ?>
+
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- BLOK SPOTŘEBY -->
+<?php if ($user['unit_id']): ?>
+<div class="block" style="border-top:4px solid var(--blue);margin-bottom:1.25rem">
+  <div class="block-header" style="cursor:default">
+    <span class="block-label">📊 Spotřeby</span>
+    <?php if (count($cons_roky) > 1): ?>
+    <div style="display:flex;gap:5px">
+      <?php foreach (array_reverse($cons_roky) as $r): ?>
+      <a href="?cons_rok=<?= $r ?>" class="btn btn-sm <?= $r==$cons_rok?'btn-primary':'btn-secondary' ?>"><?= $r ?></a>
+      <?php endforeach; ?>
+    </div>
+    <?php elseif ($cons_roky): ?>
+      <span style="font-size:12px;color:var(--muted)"><?= $cons_rok ?></span>
+    <?php endif; ?>
+  </div>
+
+  <?php if (!$cons_pivot): ?>
+  <div class="summary-body">
+    <div style="color:var(--muted);font-size:13px">Spotřeby zatím nejsou k dispozici.</div>
+  </div>
+  <?php else: ?>
+
+  <!-- Souhrnné boxy -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;padding:0 1.25rem 1rem">
+    <div style="background:var(--gray-lt);border-radius:8px;padding:8px 14px;flex:1;min-width:100px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🚿 St. voda</div>
+      <div style="font-size:1.3rem;font-weight:700;color:var(--blue)"><?= number_format($cons_soucty['SV'],3,',','&nbsp;') ?> <span style="font-size:11px;font-weight:400">m³</span></div>
+    </div>
+    <div style="background:var(--gray-lt);border-radius:8px;padding:8px 14px;flex:1;min-width:100px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🌡️ Teplá voda</div>
+      <div style="font-size:1.3rem;font-weight:700;color:var(--red)"><?= number_format($cons_soucty['TV'],3,',','&nbsp;') ?> <span style="font-size:11px;font-weight:400">m³</span></div>
+    </div>
+    <div style="background:var(--gray-lt);border-radius:8px;padding:8px 14px;flex:1;min-width:100px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">🔥 Teplo</div>
+      <div style="font-size:1.3rem;font-weight:700;color:var(--amber)"><?= number_format($cons_soucty['ITN'],0,',','&nbsp;') ?> <span style="font-size:11px;font-weight:400">dílků</span></div>
+    </div>
+  </div>
+
+  <!-- Měsíční tabulka -->
+  <div style="padding:0 1.25rem 1.25rem;overflow-x:auto">
+  <table class="tbl" style="font-size:12px">
+    <thead>
+      <tr>
+        <th>Měsíc</th>
+        <th colspan="2" style="text-align:center;color:var(--blue)">🚿 St. voda (m³)</th>
+        <th colspan="2" style="text-align:center;color:var(--red)">🌡️ Teplá voda (m³)</th>
+        <th colspan="2" style="text-align:center;color:var(--amber)">🔥 Teplo (dílků)</th>
+      </tr>
+      <tr style="font-size:10px;color:var(--muted)">
+        <th></th>
+        <th style="text-align:right">Spotřeba</th><th style="text-align:right">Stav</th>
+        <th style="text-align:right">Spotřeba</th><th style="text-align:right">Stav</th>
+        <th style="text-align:right">Spotřeba</th><th style="text-align:right">Stav</th>
+      </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($cons_mesice as $m => $nazev):
+        if (!isset($cons_pivot[$m])) continue;
+        $sv  = $cons_pivot[$m]['SV']  ?? null;
+        $tv  = $cons_pivot[$m]['TV']  ?? null;
+        $itn = $cons_pivot[$m]['ITN'] ?? null;
+    ?>
+    <tr>
+      <td style="font-weight:500"><?= $nazev ?></td>
+      <td style="text-align:right;font-weight:600;color:var(--blue)"><?= $sv  ? number_format($sv['spotreba'],3,',','&nbsp;')  : '–' ?></td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)"><?= $sv  ? number_format($sv['hodnota_konec'],3,',','&nbsp;')  : '' ?></td>
+      <td style="text-align:right;font-weight:600;color:var(--red)"><?= $tv  ? number_format($tv['spotreba'],3,',','&nbsp;')  : '–' ?></td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)"><?= $tv  ? number_format($tv['hodnota_konec'],3,',','&nbsp;')  : '' ?></td>
+      <td style="text-align:right;font-weight:600;color:var(--amber)"><?= $itn ? number_format($itn['spotreba'],0,',','&nbsp;') : '–' ?></td>
+      <td style="text-align:right;font-size:11px;color:var(--muted)"><?= $itn ? number_format($itn['hodnota_konec'],0,',','&nbsp;') : '' ?></td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+    <tfoot>
+      <tr style="font-weight:700;background:var(--gray-lt)">
+        <td>Celkem <?= $cons_rok ?></td>
+        <td style="text-align:right;color:var(--blue)"><?= number_format($cons_soucty['SV'],3,',','&nbsp;') ?></td><td></td>
+        <td style="text-align:right;color:var(--red)"><?= number_format($cons_soucty['TV'],3,',','&nbsp;') ?></td><td></td>
+        <td style="text-align:right;color:var(--amber)"><?= number_format($cons_soucty['ITN'],0,',','&nbsp;') ?></td><td></td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 

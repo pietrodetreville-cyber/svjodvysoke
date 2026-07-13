@@ -46,6 +46,10 @@ $posts = db()->query("SELECT * FROM posts WHERE visibility='verejny' ORDER BY pi
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SVJ Od Vysoké – Rozhled</title>
+<link rel="shortcut icon" href="/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{

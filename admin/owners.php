@@ -86,6 +86,7 @@ include __DIR__ . '/../includes/header.php';
   <h1>Kartotéka vlastníků</h1>
   <div style="display:flex;gap:8px">
     <a class="btn btn-secondary btn-sm" href="/admin/export.php?format=csv">⬇ Export CSV</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/export_prezence.php">📋 Prezenční listina</a>
     <a class="btn btn-primary" href="/admin/owner_edit.php">+ Přidat</a>
   </div>
 </div>

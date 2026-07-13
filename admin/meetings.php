@@ -57,11 +57,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'send_
     $mtg = $mtg->fetch();
     if ($mtg) {
         $emails = $db->query("SELECT DISTINCT email FROM owners WHERE email IS NOT NULL AND email != ''")->fetchAll(PDO::FETCH_COLUMN);
-        $body = "Vazeni vlastnici,\n\nvybor SVJ Od Vysoke si Vas dovoluje pozvat na shromazdeni vlastniku.\n\n" .
+        $body = "Vazeni vlastnici,\n\nvybor SVJ Od Vysoké – Rozhled si Vas dovoluje pozvat na shromazdeni vlastniku.\n\n" .
                 "Nazev: " . $mtg['title'] . "\n" .
                 "Datum: " . date('j. n. Y', strtotime($mtg['meeting_date'])) . ($mtg['meeting_time'] ? ' v '.substr($mtg['meeting_time'],0,5).' hod.' : '') . "\n" .
                 "Misto: " . ($mtg['location'] ?: 'viz pozvanka') . "\n\n" .
-                "Program:\n" . ($mtg['agenda'] ?: 'viz pozvanka') . "\n\nTesime se na Vasi ucast.\nVybor SVJ Od Vysoke";
+                "Program:\n" . ($mtg['agenda'] ?: 'viz pozvanka') . "\n\nTesime se na Vasi ucast.\nVybor SVJ Od Vysoké – Rozhled";
         $html = mailTemplate('Pozvanka: ' . $mtg['title'], $body);
         $ok = !empty($emails) ? sendMail($emails, '[SVJ] Pozvánka na shromáždění', $html, [], true) : false;
         $db->prepare('UPDATE meetings SET locked=1, invitation_sent_at=NOW() WHERE id=?')->execute([$mid]);
@@ -150,6 +150,7 @@ include __DIR__ . '/../includes/header.php';
       <a class="btn btn-primary btn-sm" href="/admin/meeting_detail.php?id=<?= $m['id'] ?>">Otevřít →</a>
       <a class="btn btn-secondary btn-sm" href="/admin/meetings.php?edit=<?= $m['id'] ?>">✏ Upravit</a>
       <a class="btn btn-secondary btn-sm" href="/admin/meeting_print.php?id=<?= $m['id'] ?>" target="_blank">🖨 PDF</a>
+      <a class="btn btn-secondary btn-sm" href="/admin/export_prezence.php?meeting_id=<?= $m['id'] ?>">📋 Prezenčka</a>
       <?php if (!$isLocked): ?>
       <button type="button" class="btn btn-secondary btn-sm"
               onclick="showInv(<?= $m['id'] ?>)">

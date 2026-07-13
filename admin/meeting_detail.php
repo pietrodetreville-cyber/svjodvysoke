@@ -39,8 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'remov
 // Upravit bod programu
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit_item') {
     csrfCheck();
-    $db->prepare('UPDATE meeting_agenda_items SET title=?,description=?,vote_type=? WHERE id=? AND meeting_id=?')
-       ->execute([trim($_POST['item_title']), trim($_POST['item_desc']), $_POST['vote_type'], (int)$_POST['item_id'], $id]);
+    $db->prepare('UPDATE meeting_agenda_items SET title=?,description=?,general_description=?,resolution_proposal=?,vote_type=? WHERE id=? AND meeting_id=?')
+       ->execute([trim($_POST['item_title']), trim($_POST['item_desc']), trim($_POST['general_description']??''), trim($_POST['resolution_proposal']??''), $_POST['vote_type'], (int)$_POST['item_id'], $id]);
     header("Location: /admin/meeting_detail.php?id=$id#agenda"); exit;
 }
 
@@ -56,8 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_a
     csrfCheck();
     $maxOrder = $db->prepare('SELECT COALESCE(MAX(order_num),0)+1 FROM meeting_agenda_items WHERE meeting_id=?');
     $maxOrder->execute([$id]);
-    $db->prepare('INSERT INTO meeting_agenda_items (meeting_id,order_num,title,description,vote_type) VALUES (?,?,?,?,?)')
-       ->execute([$id, $maxOrder->fetchColumn(), trim($_POST['item_title']), trim($_POST['item_desc']), $_POST['vote_type']]);
+    $db->prepare('INSERT INTO meeting_agenda_items (meeting_id,order_num,title,description,general_description,resolution_proposal,vote_type) VALUES (?,?,?,?,?,?,?)')
+       ->execute([$id, $maxOrder->fetchColumn(), trim($_POST['item_title']), trim($_POST['item_desc']), trim($_POST['general_description']??''), trim($_POST['resolution_proposal']??''), $_POST['vote_type']]);
     header("Location: /admin/meeting_detail.php?id=$id#agenda"); exit;
 }
 
@@ -189,6 +189,8 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <div style="display:flex;gap:8px">
     <a class="btn btn-primary btn-sm" href="/admin/meeting_print.php?id=<?= $id ?>" target="_blank">🖨 Zápis / PDF</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/export_prezence.php?meeting_id=<?= $id ?>">📋 Prezenčka</a>
+    <a class="btn btn-secondary btn-sm" href="/admin/export_prezence.php?meeting_id=<?= $id ?>&only_present=1">📋 Přítomní</a>
     <a class="btn btn-secondary" href="/admin/meetings.php">← Zpět</a>
   </div>
 </div>
@@ -333,8 +335,8 @@ include __DIR__ . '/../includes/header.php';
   <form method="POST" style="background:var(--gray-lt);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1.5rem">
     <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <input type="hidden" name="action" value="add_agenda">
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-      <div style="flex:2;min-width:180px">
+    <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:8px">
+      <div>
         <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Název bodu *</label>
         <input type="text" name="item_title" required style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
       </div>
@@ -346,12 +348,16 @@ include __DIR__ . '/../includes/header.php';
           <option value="žádné">Bez hlasování</option>
         </select>
       </div>
-      <div style="flex:2;min-width:180px">
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Popis (volitelný)</label>
-        <input type="text" name="item_desc" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      </div>
-      <button type="submit" class="btn btn-primary btn-sm">+ Přidat</button>
     </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Obecný popis</label>
+      <textarea name="general_description" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);min-height:60px;resize:vertical" placeholder="Podrobný popis projednávaného bodu..."></textarea>
+    </div>
+    <div style="margin-bottom:8px">
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Návrh usnesení</label>
+      <textarea name="resolution_proposal" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);min-height:60px;resize:vertical" placeholder="Shromáždění schvaluje..."></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">+ Přidat bod</button>
   </form>
 
   <?php foreach ($agendaItems as $item): ?>
@@ -373,10 +379,22 @@ include __DIR__ . '/../includes/header.php';
   <div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:1.25rem;overflow:hidden">
     <div style="background:var(--gray-lt);padding:.75rem 1rem;display:flex;align-items:center;gap:8px">
       <span style="font-size:13px;font-weight:700;color:var(--muted);min-width:20px"><?= $item['order_num'] ?>.</span>
-      <span style="font-weight:600;flex:1;font-size:15px"><?= e($item['title']) ?></span>
-      <?php if ($item['description']): ?><span style="font-size:12px;color:var(--muted)"><?= e($item['description']) ?></span><?php endif; ?>
-      <span class="badge badge-blue"><?= e($item['vote_type']) ?></span>
-      <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditItem(<?= $item['id'] ?>)">✏</button>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:15px"><?= e($item['title']) ?></div>
+        <?php if ($item['general_description'] ?? ''): ?>
+          <div style="font-size:13px;color:var(--text);margin-top:6px;padding:6px 10px;background:#fff;border-radius:4px;border-left:3px solid var(--border)">
+            <?= nl2br(e($item['general_description'])) ?>
+          </div>
+        <?php endif; ?>
+        <?php if ($item['resolution_proposal'] ?? ''): ?>
+          <div style="font-size:13px;margin-top:6px;padding:6px 10px;background:#EAF3DE;border-radius:4px;border-left:3px solid var(--green)">
+            <span style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:.05em">Návrh usnesení: </span>
+            <strong><?= nl2br(e($item['resolution_proposal'])) ?></strong>
+          </div>
+        <?php endif; ?>
+      </div>
+      <span class="badge badge-blue" style="align-self:flex-start"><?= e($item['vote_type']) ?></span>
+      <button type="button" class="btn btn-secondary btn-sm" style="align-self:flex-start" onclick="toggleEditItem(<?= $item['id'] ?>)">✏</button>
       <form method="POST" style="display:inline" onsubmit="return confirm('Smazat bod?')">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="delete_item">
@@ -385,29 +403,37 @@ include __DIR__ . '/../includes/header.php';
       </form>
     </div>
     <!-- Inline edit formulář -->
-    <div id="edit-item-<?= $item['id'] ?>" style="display:none;padding:.75rem 1rem;background:#fff;border-top:1px solid var(--border)">
-      <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+    <div id="edit-item-<?= $item['id'] ?>" style="display:none;padding:1rem;background:#fff;border-top:1px solid var(--border)">
+      <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="edit_item">
         <input type="hidden" name="item_id" value="<?= $item['id'] ?>">
-        <div style="flex:2;min-width:180px">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Název bodu</label>
-          <input type="text" name="item_title" value="<?= e($item['title']) ?>" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:8px">
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Název bodu *</label>
+            <input type="text" name="item_title" required value="<?= e($item['title']) ?>" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+          </div>
+          <div>
+            <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Hlasování</label>
+            <select name="vote_type" style="font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+              <option value="pro/proti/zdržel se" <?= $item['vote_type']==='pro/proti/zdržel se'?'selected':'' ?>>Pro / Proti / Zdržel se</option>
+              <option value="ano/ne" <?= $item['vote_type']==='ano/ne'?'selected':'' ?>>Ano / Ne</option>
+              <option value="žádné" <?= $item['vote_type']==='žádné'?'selected':'' ?>>Bez hlasování</option>
+            </select>
+          </div>
         </div>
-        <div style="flex:2;min-width:180px">
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Popis</label>
-          <input type="text" name="item_desc" value="<?= e($item['description'] ?? '') ?>" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Obecný popis</label>
+          <textarea name="general_description" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);min-height:60px;resize:vertical"><?= e($item['general_description'] ?? '') ?></textarea>
         </div>
-        <div>
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Hlasování</label>
-          <select name="vote_type" style="font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-            <option value="pro/proti/zdržel se" <?= $item['vote_type']==='pro/proti/zdržel se'?'selected':'' ?>>Pro/Proti/Zdržel</option>
-            <option value="ano/ne" <?= $item['vote_type']==='ano/ne'?'selected':'' ?>>Ano/Ne</option>
-            <option value="žádné" <?= $item['vote_type']==='žádné'?'selected':'' ?>>Bez hlasování</option>
-          </select>
+        <div style="margin-bottom:8px">
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Návrh usnesení</label>
+          <textarea name="resolution_proposal" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);min-height:60px;resize:vertical"><?= e($item['resolution_proposal'] ?? '') ?></textarea>
         </div>
-        <button type="submit" class="btn btn-primary btn-sm">Uložit</button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditItem(<?= $item['id'] ?>)">Zrušit</button>
+        <div style="display:flex;gap:8px">
+          <button type="submit" class="btn btn-primary btn-sm">Uložit</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditItem(<?= $item['id'] ?>)">Zrušit</button>
+        </div>
       </form>
     </div>
 

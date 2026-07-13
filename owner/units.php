@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     header('Location: /admin/units.php'); exit;
 }
 
-// ── Import XLSX spotřeb (Techem — konce měsíců) ─────────────────────────
+// ── Import XLSX spotřeb (Techem Bi-Weekly) ───────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_csv') {
     csrfCheck();
     $file = $_FILES['csv_file'] ?? null;
@@ -63,11 +63,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         header('Location: /admin/units.php'); exit;
     }
 
-    $tmpPath = sys_get_temp_dir() . '/techem_' . uniqid() . '.xlsx';
+    // Uložit dočasně
+    $tmpPath = sys_get_temp_dir() . '/techem_import_' . uniqid() . '.xlsx';
     move_uploaded_file($file['tmp_name'], $tmpPath);
-    $inserted = 0; $errors = [];
+
+    // Zpracovat PHP skriptem přes exec — Webglobe nemá PhpSpreadsheet
+    // Alternativa: Python zpracování přímo v PHP přes system call
+    // Použijeme vlastní PHP parser pro XLSX (ZIP + XML)
+    $inserted = 0;
+    $skipped  = 0;
+    $errors   = [];
 
     try {
+        // XLSX je ZIP archiv — rozbalíme shared strings a sheet data
         $zip = new ZipArchive();
         if ($zip->open($tmpPath) !== true) throw new Exception('Nelze otevřít XLSX soubor.');
 
@@ -84,15 +92,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
             }
         }
 
-        // Sheet XML — zkus sheet1.xml i Sheet1.xml i přes rels
+        // Sheet XML — zkus oba varianty (sheet1.xml i Sheet1.xml)
         $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
         if (!$sheetXml) $sheetXml = $zip->getFromName('xl/worksheets/Sheet1.xml');
+        // Pokud stále nenalezen, zkus workbook.xml.rels pro skutečný název
         if (!$sheetXml) {
             $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
             if ($relsXml) {
                 preg_match_all('/Target="worksheets\/([^"]+)"/', $relsXml, $m);
-                foreach ($m[1] ?? [] as $sf) {
-                    $sheetXml = $zip->getFromName('xl/worksheets/' . $sf);
+                foreach ($m[1] ?? [] as $sheetFile) {
+                    $sheetXml = $zip->getFromName('xl/worksheets/' . $sheetFile);
                     if ($sheetXml) break;
                 }
             }
@@ -100,117 +109,132 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
         $zip->close();
         if (!$sheetXml) throw new Exception('Sheet nenalezen v XLSX souboru.');
 
-        // Parsuj sheet do pole
-        $sheet   = new SimpleXMLElement($sheetXml);
-        $rowsRaw = [];
+        $sheet = new SimpleXMLElement($sheetXml);
+        $ns = $sheet->getNamespaces(true);
+        $rows_data = [];
+
         foreach ($sheet->sheetData->row as $row) {
-            $arr = [];
+            $rowArr = [];
             foreach ($row->c as $cell) {
                 $t = (string)($cell['t'] ?? '');
                 $v = isset($cell->v) ? (string)$cell->v : null;
-                if ($t === 's' && $v !== null) $v = $sharedStrings[(int)$v] ?? '';
-                elseif ($v !== null && is_numeric($v)) $v = $v + 0;
-                $arr[] = $v;
+                if ($t === 's' && $v !== null) { $v = $sharedStrings[(int)$v] ?? ''; }
+                elseif ($v !== null && is_numeric($v)) { $v = $v + 0; }
+                $rowArr[] = $v;
             }
-            $rowsRaw[] = $arr;
+            $rows_data[] = $rowArr;
         }
-        if (empty($rowsRaw)) throw new Exception('Soubor neobsahuje data.');
 
-        $header  = $rowsRaw[0];
+        if (empty($rows_data)) throw new Exception('Soubor neobsahuje data.');
+
+        $header = $rows_data[0];
         $numCols = count($header);
 
-        // ── Najdi datumové sloupce (Excel serial, konec měsíce) ──────────
-        // Formát: všechny sloupce od indexu 10 jsou datumy konců měsíců
-        $monthCols = []; // index => ['rok'=>, 'mesic'=>]
+        // Najdi datumové sloupce (Excel serial date > 40000 = po roce 2009)
+        // a rozlišíme konec měsíce
+        $monthEndCols = []; // (rok, mesic) => col_index
+        $allDateCols  = []; // col_index => (rok, mesic, den)
+
         for ($i = 10; $i < $numCols; $i++) {
             $val = $header[$i];
             if (!is_numeric($val) || $val < 40000) continue;
-            $unix = (int)(($val - 25569) * 86400);
-            $dt   = new DateTime('@' . $unix);
+            // Excel serial date -> datum
+            $unix = ($val - 25569) * 86400;
+            $dt   = new DateTime('@' . (int)$unix);
             $dt->setTimezone(new DateTimeZone('Europe/Prague'));
-            $monthCols[$i] = ['rok' => (int)$dt->format('Y'), 'mesic' => (int)$dt->format('n')];
+            $rok  = (int)$dt->format('Y');
+            $mesic= (int)$dt->format('n');
+            $den  = (int)$dt->format('j');
+            $lastDay = (int)(new DateTime("$rok-$mesic-01"))->format('t');
+            $allDateCols[$i] = [$rok, $mesic, $den];
+            if ($den === $lastDay) {
+                $monthEndCols["$rok-$mesic"] = $i;
+            }
         }
-        if (empty($monthCols)) throw new Exception('Nebyly nalezeny datumové sloupce.');
 
-        $sortedIdx = array_keys($monthCols); // seřazené dle pořadí v souboru
+        if (empty($monthEndCols)) throw new Exception('Nebyly nalezeny datumové sloupce s konci měsíců.');
 
-        // ── Mapování Byt_Zakaznik → units.id přes techem_id ─────────────
+        // Seřadit měsíce
+        uksort($monthEndCols, function($a, $b) { return strcmp($a, $b); });
+        $sortedMonths = array_keys($monthEndCols);
+
+        // Načíst mapování techem_id → units.id
         $techemMap = [];
         try {
             $tm = $db->query("SELECT id, techem_id FROM units WHERE type='byt' AND techem_id IS NOT NULL");
-            foreach ($tm->fetchAll(PDO::FETCH_ASSOC) as $r) {
-                $techemMap[(int)$r['techem_id']] = (int)$r['id'];
+            foreach ($tm->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $techemMap[(int)$row['techem_id']] = (int)$row['id'];
             }
         } catch (\PDOException $e) {}
-        if (empty($techemMap)) throw new Exception('Chybí techem_id v tabulce units. Spusťte add_techem_id.sql.');
 
-        // ── Agregace: (unit_id, rok, mesic, typ) → {zac, kon, spo} ──────
-        // Spotřeba = stav[měsíc] - stav[předchozí měsíc]
-        // Více přístrojů stejného typu v jednom bytě → kumulace
+        if (empty($techemMap)) {
+            throw new Exception('Tabulka units neobsahuje sloupec techem_id. Spusťte nejprve add_techem_id.sql v SQL konzoli.');
+        }
+
+        // Agregace: (unit_id, rok, mesic, typ) => {zacatek, konec, spotreba}
         $agg = [];
 
-        foreach (array_slice($rowsRaw, 1) as $row) {
+        foreach (array_slice($rows_data, 1) as $row) {
             $bytStr = $row[3] ?? null;
             $typ    = strtoupper(trim($row[7] ?? ''));
             if (!$bytStr || !in_array($typ, ['SV','TV','ITN'])) continue;
-
             $techemId = (int)ltrim((string)$bytStr, '0') ?: 1;
             $unitId   = $techemMap[$techemId] ?? null;
-            if (!$unitId) continue;
+            if (!$unitId) continue; // neznámý byt — přeskočit
 
-            $jednotka = $typ === 'ITN' ? 'dily' : 'm3';
+            foreach ($sortedMonths as $idx => $monthKey) {
+                $colKonec = $monthEndCols[$monthKey];
+                $valKonec = isset($row[$colKonec]) ? (float)$row[$colKonec] : null;
+                if ($valKonec === null) continue;
 
-            foreach ($sortedIdx as $pos => $colIdx) {
-                if ($pos === 0) continue; // první sloupec = počáteční stav, ne měsíc
+                // Stav začátek = konec předchozího měsíce
+                $valZac = null;
+                if ($idx > 0) {
+                    $prevKey  = $sortedMonths[$idx - 1];
+                    $colPrev  = $monthEndCols[$prevKey];
+                    $valZac   = isset($row[$colPrev]) ? (float)$row[$colPrev] : null;
+                }
 
-                $prevCol  = $sortedIdx[$pos - 1];
-                $valKonec = isset($row[$colIdx])  ? (float)$row[$colIdx]  : null;
-                $valZac   = isset($row[$prevCol]) ? (float)$row[$prevCol] : null;
-                if ($valKonec === null || $valZac === null) continue;
-
+                // Přeskočit první měsíc bez předchozího stavu (nelze počítat spotřebu)
+                if ($valZac === null) continue;
                 $spotreba = $valKonec - $valZac;
-                if ($spotreba < 0) $spotreba = 0; // reset měřidla → 0
+                if ($spotreba < 0) continue; // přeskočit záporné (reset měřidla)
 
-                $rok   = $monthCols[$colIdx]['rok'];
-                $mesic = $monthCols[$colIdx]['mesic'];
-                $key   = "{$unitId}-{$rok}-{$mesic}-{$typ}";
+                [$rok, $mesic] = explode('-', $monthKey);
+                $key = "$unitId-$rok-$mesic-$typ";
 
                 if (!isset($agg[$key])) {
-                    $agg[$key] = ['unit_id'=>$unitId,'rok'=>$rok,'mesic'=>$mesic,'typ'=>$typ,
-                                  'jednotka'=>$jednotka,'zac'=>$valZac,'kon'=>$valKonec,'spo'=>$spotreba];
+                    $agg[$key] = ['unit_id'=>(int)$unitId,'rok'=>(int)$rok,'mesic'=>(int)$mesic,'typ'=>$typ,'zac'=>$valZac,'kon'=>$valKonec,'spo'=>$spotreba];
                 } else {
-                    // Kumulace více přístrojů
-                    $agg[$key]['zac'] += $valZac;
+                    // Sečíst více přístrojů stejného typu (ITN má 2+)
                     $agg[$key]['kon'] += $valKonec;
+                    $agg[$key]['zac'] += $valZac;
                     $agg[$key]['spo'] += $spotreba;
                 }
             }
         }
 
-        // ── Uložit do DB ─────────────────────────────────────────────────
+        // Uložit do DB
         $stmt = $db->prepare("
             INSERT INTO consumption (unit_id, rok, mesic, typ, jednotka, hodnota_zacatek, hodnota_konec, spotreba)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                hodnota_zacatek = VALUES(hodnota_zacatek),
-                hodnota_konec   = VALUES(hodnota_konec),
-                spotreba        = VALUES(spotreba)
+            ON DUPLICATE KEY UPDATE hodnota_zacatek=VALUES(hodnota_zacatek), hodnota_konec=VALUES(hodnota_konec), spotreba=VALUES(spotreba)
         ");
+
         foreach ($agg as $rec) {
+            $jednotka = $rec['typ'] === 'ITN' ? 'dily' : 'm3';
             try {
-                $stmt->execute([$rec['unit_id'], $rec['rok'], $rec['mesic'], $rec['typ'], $rec['jednotka'],
+                $stmt->execute([$rec['unit_id'], $rec['rok'], $rec['mesic'], $rec['typ'], $jednotka,
                                 round($rec['zac'], 3), round($rec['kon'], 3), round($rec['spo'], 3)]);
                 $inserted++;
             } catch (\PDOException $e) {
-                $errors[] = "Byt {$rec['unit_id']} {$rec['rok']}-{$rec['mesic']} {$rec['typ']}";
+                $errors[] = "Byt {$rec['unit_id']} / {$rec['rok']}-{$rec['mesic']} / {$rec['typ']}";
             }
         }
 
-        $roky  = array_unique(array_column(array_values($agg), 'rok'));
-        sort($roky);
-        $bytu  = count(array_unique(array_column(array_values($agg), 'unit_id')));
-        $msg   = "Import dokončen: {$inserted} záznamů uloženo ({$bytu} bytů, roky " . implode(', ', $roky) . ").";
-        if ($errors) $msg .= ' Chyby (' . count($errors) . '): ' . implode(', ', array_slice($errors, 0, 3));
+        $msg = "Import dokončen: $inserted záznamů uloženo";
+        $msg .= ' (' . count($sortedMonths) . ' měsíců, ' . count(array_unique(array_column(array_values($agg), 'unit_id'))) . ' bytů).';
+        if ($errors) $msg .= ' Chyby: ' . implode(', ', array_slice($errors, 0, 5));
         flash($msg, $errors ? 'warning' : 'success');
 
     } catch (Exception $e) {
@@ -220,6 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     @unlink($tmpPath);
     header('Location: /admin/units.php'); exit;
 }
+
 // ── Uložit spotřebu ručně ─────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_consumption') {
     csrfCheck();
@@ -472,10 +497,8 @@ tr.editing-row{background:#f0f7ff!important}
             <a class="btn btn-secondary btn-sm" href="?edit=<?= $u['id'] ?>">Editovat</a>
           <?php endif; ?>
           <?php if ($u['type'] === 'byt'): ?>
-            <a class="btn btn-secondary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>"
-               title="Technický popis">🏠</a>
             <a class="btn btn-secondary btn-sm" href="?cons=<?= $u['id'] ?>&cons_rok=<?= $consRok ?>#cons-<?= $u['id'] ?>"
-               style="color:var(--blue)" title="Spotřeby">📊</a>
+               style="color:var(--blue)">📊</a>
           <?php endif; ?>
           <form method="POST" style="display:inline" onsubmit="return confirm('Smazat <?= e($u['label']) ?>?')">
             <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">

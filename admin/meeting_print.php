@@ -315,6 +315,17 @@ $agendaItems = $agendaItems->fetchAll();
     <?php if ($item['description']): ?>
       <p class="note-text" style="margin-bottom:6px"><?= htmlspecialchars($item['description']) ?></p>
     <?php endif; ?>
+    <?php if ($item['general_description'] ?? ''): ?>
+      <div style="font-size:9pt;color:#333;margin-bottom:8px;padding:6px 10px;background:#f5f5f5;border-left:3px solid #ccc;border-radius:2px">
+        <?= nl2br(htmlspecialchars($item['general_description'])) ?>
+      </div>
+    <?php endif; ?>
+    <?php if ($item['resolution_proposal'] ?? ''): ?>
+      <div style="font-size:9pt;margin-bottom:8px;padding:6px 10px;background:#EAF3DE;border-left:3px solid #3B6D11;border-radius:2px">
+        <span style="font-size:8pt;font-weight:bold;color:#3B6D11;text-transform:uppercase;letter-spacing:.05em">Návrh usnesení: </span>
+        <strong><?= nl2br(htmlspecialchars($item['resolution_proposal'])) ?></strong>
+      </div>
+    <?php endif; ?>
 
     <?php if ($item['vote_type'] === 'žádné'): ?>
       <p class="note-text">Informacni bod – bez hlasovani.</p>
@@ -358,7 +369,7 @@ $agendaItems = $agendaItems->fetchAll();
   <div class="sig-row">
     <div class="sig-line">Predseda shromazdeni<br><br><br>Jmeno a podpis</div>
     <div class="sig-line">Zapisovatel<br><br><br>Jmeno a podpis</div>
-    <div class="sig-line">Overovatel zapisu<br><br><br>Jmeno a podpis</div>
+
   </div>
 </div>
 

@@ -23,6 +23,16 @@ if (!$isAdmin) {
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
+<meta name="theme-color" content="#185FA5">
+<link rel="manifest" href="/manifest.json">
+<link rel="shortcut icon" href="/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+<link rel="apple-touch-icon" href="/icons/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="SVJ Rozhled">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($pageTitle ?? SITE_NAME) ?> – <?= e(SITE_NAME) ?></title>
 <style>
@@ -121,6 +131,11 @@ a:hover{text-decoration:underline}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 @media(max-width:700px){.grid2{grid-template-columns:1fr}}
 </style>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+</script>
 </head>
 <body>
 <?php if (defined('SITE_NAME') && str_contains(SITE_NAME, '[TEST]')): ?>

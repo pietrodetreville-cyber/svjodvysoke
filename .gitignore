@@ -1,1 +1,5 @@
-config.php
+.env
+.env.production
+uploads/documents/*
+!uploads/documents/.gitkeep
+*.log
