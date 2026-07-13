@@ -1,6 +1,6 @@
 -- SVJ Od Vysoké – databázová struktura
 -- Spusťte v phpMyAdmin nebo MySQL klientu
--- Vygenerováno ze skutečného produkčního/testovacího schématu (svj_test), 2026-07-13
+-- Vygenerováno přímo z produkčního schématu (odvysoke.drymtym.cz), 2026-07-13
 
 SET NAMES utf8mb4;
 SET time_zone = '+01:00';
@@ -27,32 +27,34 @@ CREATE TABLE IF NOT EXISTS units (
   share_numerator INT NULL COMMENT 'podíl – čitatel',
   share_denominator INT NULL COMMENT 'podíl – jmenovatel',
   linked_unit_id INT NULL COMMENT 'ID bytu ke kterému garáž patří',
-  np TINYINT NULL COMMENT 'podlaží (NP)',
-  dispozice VARCHAR(20) NULL COMMENT 'např. 1+kk',
-  vymera_m2 DECIMAL(6,2) NULL COMMENT 'přesná výměra dle technického popisu',
-  vymera_pozn VARCHAR(200) NULL COMMENT 'poznámka k výměře',
+  techem_id SMALLINT UNSIGNED NULL COMMENT 'mapování na import spotřeb z Techem CSV',
+  np TINYINT UNSIGNED NULL COMMENT 'Nadzemní podlaží (1=přízemí, 2=1.patro...)',
+  dispozice VARCHAR(20) NULL COMMENT 'Dispozice bytu (1+kk, 3+1...)',
+  vymera_m2 DECIMAL(7,2) NULL COMMENT 'Celková výměra bez lodžie a sklepu (m²)',
+  vymera_pozn VARCHAR(100) NULL COMMENT 'Poznámka k výměře',
   FOREIGN KEY (linked_unit_id) REFERENCES units(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Místnosti a vybavení jednotky (technický popis)
+-- Pozn.: bez FK na units (stejně jako na produkci) - mazání jednotky rozdělené jinam.
 CREATE TABLE IF NOT EXISTS unit_rooms (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  unit_id INT NOT NULL,
-  nazev VARCHAR(120) NOT NULL,
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT UNSIGNED NOT NULL,
+  nazev VARCHAR(60) NOT NULL,
   vymera_m2 DECIMAL(6,2) NULL,
-  poznamka VARCHAR(200) NULL,
-  order_num INT DEFAULT 0,
-  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+  poznamka VARCHAR(100) NULL,
+  order_num TINYINT UNSIGNED DEFAULT 0,
+  KEY idx_unit (unit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS unit_equipment (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  unit_id INT NOT NULL,
-  polozka VARCHAR(120) NOT NULL,
-  pocet INT NOT NULL DEFAULT 1,
-  poznamka VARCHAR(200) NULL,
-  order_num INT DEFAULT 0,
-  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT UNSIGNED NOT NULL,
+  polozka VARCHAR(80) NOT NULL,
+  pocet TINYINT UNSIGNED DEFAULT 1,
+  poznamka VARCHAR(100) NULL,
+  order_num TINYINT UNSIGNED DEFAULT 0,
+  KEY idx_unit (unit_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Kartotéka vlastníků
@@ -203,6 +205,8 @@ CREATE TABLE IF NOT EXISTS meeting_agenda_items (
   title VARCHAR(200) NOT NULL,
   description TEXT,
   vote_type ENUM('žádné','pro/proti/zdržel se','ano/ne') DEFAULT 'pro/proti/zdržel se',
+  general_description TEXT,
+  resolution_proposal TEXT,
   FOREIGN KEY (meeting_id) REFERENCES meetings(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -316,18 +320,21 @@ CREATE TABLE IF NOT EXISTS drive_links (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Spotřeby (studená/teplá voda, teplo – import z Techem)
+-- Pozn.: bez FK na units (stejně jako na produkci).
 CREATE TABLE IF NOT EXISTS consumption (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  unit_id INT NOT NULL,
-  rok SMALLINT NOT NULL,
-  mesic TINYINT NOT NULL,
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT UNSIGNED NOT NULL,
+  rok SMALLINT UNSIGNED NOT NULL,
+  mesic TINYINT UNSIGNED NOT NULL,
   typ ENUM('SV','TV','ITN') NOT NULL,
   jednotka VARCHAR(10) NOT NULL,
   hodnota_zacatek DECIMAL(10,3) NULL,
   hodnota_konec DECIMAL(10,3) NULL,
   spotreba DECIMAL(10,3) NOT NULL,
-  UNIQUE KEY one_reading (unit_id, rok, mesic, typ),
-  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_consumption (unit_id, rok, mesic, typ),
+  KEY idx_unit (unit_id),
+  KEY idx_rok_mesic (rok, mesic)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
