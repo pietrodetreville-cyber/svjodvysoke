@@ -201,16 +201,23 @@ $o = $owner ?? [];
     <?php else: ?>
       <p style="font-size:12px;color:var(--muted);margin-bottom:.5rem" id="usage-empty-msg">Zatím žádný záznam u této jednotky.</p>
       <?php if ($owner): ?>
-      <form method="POST" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+      <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="save_tenant_inline">
         <input type="hidden" name="t_typ" id="usage-typ-field" value="<?= ($o['residence'] ?? '') === 'věcné břemeno' ? 'vecne_bremeno' : 'najem' ?>">
-        <div class="form-group" style="margin:0;min-width:160px"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
-        <div class="form-group" style="margin:0;min-width:160px"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
-        <div class="form-group" style="margin:0;min-width:140px"><label style="font-size:11px">Telefon</label><input type="tel" name="t_phone"></div>
-        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_notify_email" checked> odesílat e-mail info</label>
-        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_whatsapp"> WhatsApp</label>
-        <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
+        <div class="form-row">
+          <div class="form-group" style="margin:0"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
+          <div class="form-group" style="margin:0"></div>
+        </div>
+        <div class="form-row" style="margin-top:.5rem">
+          <div class="form-group" style="margin:0"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
+          <div class="form-group" style="margin:0"><label style="font-size:11px">Telefon</label><input type="tel" name="t_phone"></div>
+        </div>
+        <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
+          <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_notify_email" checked> odesílat e-mail info</label>
+          <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_whatsapp"> WhatsApp</label>
+          <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
+        </div>
       </form>
       <?php else: ?>
       <p style="font-size:12px;color:var(--muted)">Nejdřív uložte kartu vlastníka, pak půjde přidat záznam rovnou zde.</p>
@@ -232,33 +239,29 @@ $o = $owner ?? [];
       <label>Jméno a příjmení (hlavní vlastník) *</label>
       <input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>">
     </div>
-    <div class="form-group"></div>
-  </div>
-
-  <div class="form-row">
     <div class="form-group">
       <label>Počet osob v jednotce</label>
       <input type="number" name="persons_count" min="0" max="20" placeholder="0"
              value="<?= e($o['persons_count'] ?? '') ?>">
     </div>
-    <div class="form-group"></div>
   </div>
+
   <!-- Kontakty -->
   <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;background:var(--gray-lt)">
     <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:.75rem">Kontaktní údaje</div>
-    <div class="form-group">
-      <label>E-mail</label>
-      <input type="email" name="email" value="<?= e($o['email'] ?? '') ?>">
+    <div class="form-row">
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" name="email" value="<?= e($o['email'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="tel" name="phone" value="<?= e($o['phone'] ?? '') ?>">
+      </div>
     </div>
-    <div style="margin-bottom:.75rem;font-size:13px;display:flex;gap:1.25rem">
-      <label style="cursor:pointer"><input type="checkbox" name="email_verified" <?= !empty($o['email_verified']) ? 'checked' : '' ?>> Ověřeno</label>
-      <label style="cursor:pointer"><input type="checkbox" name="notify_email" <?= !isset($o['notify_email']) || $o['notify_email'] ? 'checked' : '' ?>> Používat pro odesílání informací</label>
-    </div>
-    <div class="form-group">
-      <label>Telefon</label>
-      <input type="tel" name="phone" value="<?= e($o['phone'] ?? '') ?>">
-    </div>
-    <div style="font-size:13px">
+    <div style="font-size:13px;display:flex;gap:1.25rem;flex-wrap:wrap">
+      <label style="cursor:pointer"><input type="checkbox" name="email_verified" <?= !empty($o['email_verified']) ? 'checked' : '' ?>> E-mail ověřen</label>
+      <label style="cursor:pointer"><input type="checkbox" name="notify_email" <?= !isset($o['notify_email']) || $o['notify_email'] ? 'checked' : '' ?>> Odesílat e-mail info</label>
       <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($o['whatsapp']) ? 'checked' : '' ?>> Používat pro WhatsApp</label>
     </div>
   </div>
