@@ -1,0 +1,5 @@
+.env
+.env.production
+uploads/documents/*
+!uploads/documents/.gitkeep
+*.log

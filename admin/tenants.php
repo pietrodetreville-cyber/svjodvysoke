@@ -1,0 +1,231 @@
+<?php
+require_once __DIR__ . '/../includes/functions.php';
+$user = requireAdmin();
+$pageTitle = 'Nájemníci';
+$db = db();
+
+// Přidat nájemníka
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
+    csrfCheck();
+    $unitId = (int)$_POST['unit_id'];
+    $name   = trim($_POST['full_name'] ?? '');
+    if ($unitId && $name) {
+        $db->prepare(
+            'INSERT INTO tenants (unit_id,full_name,email,phone,rent_from,rent_until,persons_count,note) VALUES (?,?,?,?,?,?,?,?)'
+        )->execute([
+            $unitId, $name,
+            trim($_POST['email'] ?? '') ?: null,
+            trim($_POST['phone'] ?? '') ?: null,
+            $_POST['rent_from'] ?: null,
+            $_POST['rent_until'] ?: null,
+            !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
+            trim($_POST['note'] ?? '') ?: null,
+        ]);
+        flash('Nájemník přidán.', 'success');
+    }
+    header('Location: /admin/tenants.php'); exit;
+}
+
+// Upravit
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit') {
+    csrfCheck();
+    $db->prepare(
+        'UPDATE tenants SET unit_id=?,full_name=?,email=?,phone=?,rent_from=?,rent_until=?,persons_count=?,note=? WHERE id=?'
+    )->execute([
+        (int)$_POST['unit_id'],
+        trim($_POST['full_name']),
+        trim($_POST['email'] ?? '') ?: null,
+        trim($_POST['phone'] ?? '') ?: null,
+        $_POST['rent_from'] ?: null,
+        $_POST['rent_until'] ?: null,
+        !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
+        trim($_POST['note'] ?? '') ?: null,
+        (int)$_POST['id'],
+    ]);
+    flash('Nájemník upraven.', 'success');
+    header('Location: /admin/tenants.php'); exit;
+}
+
+// Smazat
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    csrfCheck();
+    $db->prepare('DELETE FROM tenants WHERE id=?')->execute([(int)$_POST['id']]);
+    flash('Nájemník smazán.', 'success');
+    header('Location: /admin/tenants.php'); exit;
+}
+
+// Editace?
+$editing = null;
+if (isset($_GET['edit'])) {
+    $stmt = $db->prepare('SELECT * FROM tenants WHERE id=?');
+    $stmt->execute([(int)$_GET['edit']]);
+    $editing = $stmt->fetch();
+}
+
+$tenants = $db->query(
+    'SELECT t.*, u.label AS unit_label, u.type AS unit_type
+     FROM tenants t JOIN units u ON t.unit_id=u.id
+     ORDER BY u.label, t.full_name'
+)->fetchAll();
+
+$units = $db->query("SELECT id, label, type FROM units WHERE type='byt' ORDER BY label")->fetchAll();
+
+// Statistiky
+$total    = count($tenants);
+$active   = array_filter($tenants, fn($t) => !$t['rent_until'] || strtotime($t['rent_until']) >= time());
+$expiring = array_filter($tenants, fn($t) => $t['rent_until'] && strtotime($t['rent_until']) < strtotime('+30 days') && strtotime($t['rent_until']) >= time());
+
+include __DIR__ . '/../includes/header.php';
+?>
+
+<div class="page-hd"><h1>Nájemníci</h1></div>
+
+<!-- Statistiky -->
+<div class="metrics" style="margin-bottom:1.25rem">
+  <div class="metric"><div class="metric-num"><?= $total ?></div><div class="metric-lbl">Celkem</div></div>
+  <div class="metric"><div class="metric-num" style="color:var(--green)"><?= count($active) ?></div><div class="metric-lbl">Aktivních</div></div>
+  <div class="metric"><div class="metric-num" style="color:var(--amber)"><?= count($expiring) ?></div><div class="metric-lbl">Končí do 30 dní</div></div>
+</div>
+
+<!-- Formulář -->
+<div class="card" style="max-width:680px;margin-bottom:1.5rem">
+  <div class="card-title"><?= $editing ? 'Upravit nájemníka' : 'Přidat nájemníka' ?></div>
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+    <input type="hidden" name="action" value="<?= $editing ? 'edit' : 'add' ?>">
+    <?php if ($editing): ?><input type="hidden" name="id" value="<?= $editing['id'] ?>"><?php endif; ?>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Bytová jednotka *</label>
+        <select name="unit_id" required>
+          <option value="">— vyberte byt —</option>
+          <?php foreach ($units as $u): ?>
+            <option value="<?= $u['id'] ?>" <?= ($editing['unit_id'] ?? 0) == $u['id'] ? 'selected' : '' ?>>
+              <?= e($u['label']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Jméno a příjmení *</label>
+        <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? '') ?>">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" name="email" value="<?= e($editing['email'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="tel" name="phone" value="<?= e($editing['phone'] ?? '') ?>">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nájem od</label>
+        <input type="date" name="rent_from" value="<?= e($editing['rent_from'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label>Nájem do</label>
+        <input type="date" name="rent_until" value="<?= e($editing['rent_until'] ?? '') ?>">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Počet osob</label>
+        <input type="number" name="persons_count" min="1" max="20" value="<?= e($editing['persons_count'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label>Poznámka</label>
+        <input type="text" name="note" value="<?= e($editing['note'] ?? '') ?>">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button type="submit" class="btn btn-primary">Uložit</button>
+      <?php if ($editing): ?><a class="btn btn-secondary" href="/admin/tenants.php">Zrušit</a><?php endif; ?>
+    </div>
+  </form>
+</div>
+
+<!-- Seznam -->
+<div class="card">
+  <div class="card-title">Seznam nájemníků (<?= $total ?>)</div>
+  <?php if (!$tenants): ?>
+    <p style="color:var(--muted);font-size:14px">Zatím žádní nájemníci.</p>
+  <?php else: ?>
+  <div class="tbl-wrap">
+  <table class="tbl">
+    <thead>
+      <tr>
+        <th>Jednotka</th>
+        <th>Nájemník</th>
+        <th>E-mail</th>
+        <th>Telefon</th>
+        <th>Osoby</th>
+        <th>Nájem od</th>
+        <th>Nájem do</th>
+        <th>Stav</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    <?php foreach ($tenants as $t):
+      $isActive  = !$t['rent_until'] || strtotime($t['rent_until']) >= time();
+      $isExpiring= $t['rent_until'] && strtotime($t['rent_until']) < strtotime('+30 days') && strtotime($t['rent_until']) >= time();
+      $daysLeft  = $t['rent_until'] ? ceil((strtotime($t['rent_until']) - time()) / 86400) : null;
+    ?>
+    <tr>
+      <td><strong><?= e($t['unit_label']) ?></strong><br><small style="color:var(--muted)"><?= e($t['unit_type']) ?></small></td>
+      <td>
+        <?= e($t['full_name']) ?>
+        <?php if ($t['note']): ?><br><small style="color:var(--muted)"><?= e($t['note']) ?></small><?php endif; ?>
+      </td>
+      <td style="font-size:13px"><?= $t['email'] ? '<a href="mailto:'.e($t['email']).'">'.e($t['email']).'</a>' : '–' ?></td>
+      <td style="font-size:13px;white-space:nowrap"><?= e($t['phone'] ?: '–') ?></td>
+      <td style="text-align:center"><?= $t['persons_count'] ?? '–' ?></td>
+      <td style="font-size:13px"><?= $t['rent_from'] ? date('j. n. Y', strtotime($t['rent_from'])) : '–' ?></td>
+      <td style="font-size:13px">
+        <?php if ($t['rent_until']): ?>
+          <?= date('j. n. Y', strtotime($t['rent_until'])) ?>
+          <?php if ($daysLeft !== null && $daysLeft <= 30 && $daysLeft >= 0): ?>
+            <br><small style="color:var(--amber)">za <?= $daysLeft ?> dní</small>
+          <?php elseif ($daysLeft !== null && $daysLeft < 0): ?>
+            <br><small style="color:var(--red)">prošlé</small>
+          <?php endif; ?>
+        <?php else: ?>
+          <span style="color:var(--muted)">neurčito</span>
+        <?php endif; ?>
+      </td>
+      <td>
+        <?php if (!$isActive): ?>
+          <span class="badge badge-miss">Prošlý</span>
+        <?php elseif ($isExpiring): ?>
+          <span class="badge badge-partial">Končí brzy</span>
+        <?php else: ?>
+          <span class="badge badge-ok">Aktivní</span>
+        <?php endif; ?>
+      </td>
+      <td style="white-space:nowrap">
+        <a class="btn btn-secondary btn-sm" href="?edit=<?= $t['id'] ?>">Upravit</a>
+        <form method="POST" style="display:inline" onsubmit="return confirm('Smazat nájemníka?')">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="<?= $t['id'] ?>">
+          <button type="submit" class="btn btn-danger btn-sm">Smazat</button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
+
+<?php include __DIR__ . '/../includes/footer.php'; ?>
