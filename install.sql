@@ -27,7 +27,32 @@ CREATE TABLE IF NOT EXISTS units (
   share_numerator INT NULL COMMENT 'podíl – čitatel',
   share_denominator INT NULL COMMENT 'podíl – jmenovatel',
   linked_unit_id INT NULL COMMENT 'ID bytu ke kterému garáž patří',
+  np TINYINT NULL COMMENT 'podlaží (NP)',
+  dispozice VARCHAR(20) NULL COMMENT 'např. 1+kk',
+  vymera_m2 DECIMAL(6,2) NULL COMMENT 'přesná výměra dle technického popisu',
+  vymera_pozn VARCHAR(200) NULL COMMENT 'poznámka k výměře',
   FOREIGN KEY (linked_unit_id) REFERENCES units(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Místnosti a vybavení jednotky (technický popis)
+CREATE TABLE IF NOT EXISTS unit_rooms (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT NOT NULL,
+  nazev VARCHAR(120) NOT NULL,
+  vymera_m2 DECIMAL(6,2) NULL,
+  poznamka VARCHAR(200) NULL,
+  order_num INT DEFAULT 0,
+  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS unit_equipment (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  unit_id INT NOT NULL,
+  polozka VARCHAR(120) NOT NULL,
+  pocet INT NOT NULL DEFAULT 1,
+  poznamka VARCHAR(200) NULL,
+  order_num INT DEFAULT 0,
+  FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Kartotéka vlastníků
