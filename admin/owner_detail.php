@@ -40,6 +40,12 @@ $najemnici = $db->prepare(
 $najemnici->execute([$owner['unit_id']]);
 $najemnici = $najemnici->fetchAll();
 
+// Další vlastníci (SJM / podílové)
+$dalsiVlastnici = $db->prepare("SELECT * FROM owner_persons WHERE owner_id = ? ORDER BY id");
+$dalsiVlastnici->execute([$owner['id']]);
+$dalsiVlastnici = $dalsiVlastnici->fetchAll();
+$ownershipLabels = ['bezpodílové' => 'Jednoduché', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové', 'neuvedeno' => 'Neuvedeno'];
+
 // Uživatelský účet vlastníka
 try {
     $ucet = $db->prepare(
@@ -166,13 +172,28 @@ $mainPhone = ($owner['primary_phone'] ?? 1) == 2 && $owner['phone2'] ? $owner['p
       <div>
         <div style="font-size:18px;font-weight:700"><?= e($owner['full_name'] ?: '—') ?></div>
         <div style="font-size:12px;color:var(--muted)">
-          Způsob užívání: <strong><?= e($owner['residence'] ?: 'neuvedeno') ?></strong>
+          Vlastnictví: <strong><?= e($ownershipLabels[$owner['ownership_form'] ?? 'neuvedeno'] ?? $owner['ownership_form']) ?></strong>
+          &nbsp;·&nbsp; Způsob užívání: <strong><?= e($owner['residence'] ?: 'neuvedeno') ?></strong>
           <?php if ($owner['persons_count']): ?>
             &nbsp;·&nbsp; <?= $owner['persons_count'] ?> os. v jednotce
           <?php endif; ?>
         </div>
       </div>
     </div>
+
+    <?php if ($dalsiVlastnici): ?>
+    <div style="margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px">Další vlastníci</div>
+      <?php foreach ($dalsiVlastnici as $p): ?>
+        <div style="font-size:13px;margin-bottom:2px">
+          👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' — '.e($p['relation']) : '' ?>
+          <?php if ($p['email'] || $p['phone']): ?>
+            <span style="color:var(--muted)">(<?= e($p['email'] ?: '') ?><?= $p['email'] && $p['phone'] ? ', ' : '' ?><?= e($p['phone'] ?: '') ?>)</span>
+          <?php endif; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
 
     <!-- Kontakty -->
     <div class="od-contacts">
@@ -252,17 +273,22 @@ $mainPhone = ($owner['primary_phone'] ?? 1) == 2 && $owner['phone2'] ? $owner['p
     <?php endif; ?>
   </div>
 
-  <!-- BLOK: Nájemníci -->
+  <!-- BLOK: Uživatelé jednotky -->
   <?php if ($najemnici): ?>
   <div class="card" style="border-top:4px solid #3B6D11;margin-bottom:1rem">
-    <div style="font-size:13px;font-weight:600;color:#3B6D11;margin-bottom:.75rem">🏠 Nájemníci v jednotce</div>
+    <div style="font-size:13px;font-weight:600;color:#3B6D11;margin-bottom:.75rem">🏠 Uživatelé jednotky</div>
     <?php foreach ($najemnici as $t):
       $isActive  = !$t['rent_until'] || strtotime($t['rent_until']) >= time();
       $isExpiring= $t['rent_until'] && strtotime($t['rent_until']) < strtotime('+30 days') && $isActive;
     ?>
     <div style="display:flex;align-items:center;gap:10px;padding:.6rem 0;border-bottom:1px solid var(--border)">
       <div style="flex:1">
-        <div style="font-weight:500"><?= e($t['full_name']) ?></div>
+        <div style="font-weight:500">
+          <?= e($t['full_name']) ?>
+          <?php if (($t['typ'] ?? 'najem') === 'vecne_bremeno'): ?>
+            <span class="badge badge-partial" style="margin-left:4px">Věcné břemeno</span>
+          <?php endif; ?>
+        </div>
         <div style="font-size:12px;color:var(--muted)">
           <?= $t['email'] ? '<a href="mailto:'.e($t['email']).'">'.e($t['email']).'</a>' : '' ?>
           <?= $t['phone'] ? ($t['email']?' · ':'').'📞 '.e($t['phone']) : '' ?>
