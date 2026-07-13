@@ -15,7 +15,7 @@ $pageTitle = $owner ? 'Upravit kartu' : 'Přidat vlastníka';
 
 $units = $db->query('SELECT * FROM units ORDER BY label')->fetchAll();
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'save_owner') === 'save_owner') {
     csrfCheck();
     $data = [
         'unit_id'      => (int)$_POST['unit_id'],
@@ -24,6 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'phone'        => trim($_POST['phone'] ?? ''),
         'address'      => trim($_POST['address'] ?? ''),
         'residence'      => $_POST['residence'] ?? 'neuvedeno',
+        'ownership_form' => $_POST['ownership_form'] ?? 'neuvedeno',
         'persons_count'  => !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
         'email2'         => trim($_POST['email2'] ?? '') ?: null,
         'phone2'         => trim($_POST['phone2'] ?? '') ?: null,
@@ -43,30 +44,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($owner) {
         $db->prepare(
-            'UPDATE owners SET unit_id=?,full_name=?,email=?,phone=?,address=?,residence=?,note=?,gdpr_consent=?,gdpr_date=?,status=?,updated_by_role=?,persons_count=?,email2=?,phone2=?,primary_email=?,primary_phone=? WHERE id=?'
+            'UPDATE owners SET unit_id=?,full_name=?,email=?,phone=?,address=?,residence=?,ownership_form=?,note=?,gdpr_consent=?,gdpr_date=?,status=?,updated_by_role=?,persons_count=?,email2=?,phone2=?,primary_email=?,primary_phone=? WHERE id=?'
         )->execute([
             $data['unit_id'], $data['full_name'], $data['email'], $data['phone'],
-            $data['address'], $data['residence'], $data['note'], $data['gdpr_consent'],
+            $data['address'], $data['residence'], $data['ownership_form'], $data['note'], $data['gdpr_consent'],
             $data['gdpr_date'], $data['status'],
             $user['role'], $data['persons_count'],
             $data['email2'], $data['phone2'], $data['primary_email'], $data['primary_phone'],
             $owner['id']
         ]);
         flash('Karta uložena.', 'success');
+        header('Location: /admin/owner_edit.php?id=' . $owner['id']); exit;
     } else {
         $db->prepare(
-            'INSERT INTO owners (unit_id,full_name,email,phone,address,residence,note,gdpr_consent,gdpr_date,status,updated_by_role,persons_count,email2,phone2,primary_email,primary_phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+            'INSERT INTO owners (unit_id,full_name,email,phone,address,residence,ownership_form,note,gdpr_consent,gdpr_date,status,updated_by_role,persons_count,email2,phone2,primary_email,primary_phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute([
             $data['unit_id'], $data['full_name'], $data['email'], $data['phone'],
-            $data['address'], $data['residence'], $data['note'], $data['gdpr_consent'],
+            $data['address'], $data['residence'], $data['ownership_form'], $data['note'], $data['gdpr_consent'],
             $data['gdpr_date'], $data['status'],
             $user['role'], $data['persons_count'],
             $data['email2'], $data['phone2'], $data['primary_email'], $data['primary_phone']
         ]);
         flash('Vlastník přidán.', 'success');
+        header('Location: /admin/owners.php'); exit;
     }
-    header('Location: /admin/owners.php'); exit;
 }
+
+// Další vlastníci (owner_persons) — jen když karta už existuje
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_person' && $owner) {
+    csrfCheck();
+    $pid = (int)($_POST['person_id'] ?? 0);
+    $pdata = [
+        trim($_POST['p_full_name'] ?? ''),
+        trim($_POST['p_email'] ?? '') ?: null,
+        trim($_POST['p_phone'] ?? '') ?: null,
+        trim($_POST['p_relation'] ?? '') ?: null,
+        trim($_POST['p_address'] ?? '') ?: null,
+        trim($_POST['p_note'] ?? '') ?: null,
+    ];
+    if ($pdata[0] !== '') {
+        if ($pid) {
+            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,phone=?,relation=?,address=?,note=? WHERE id=? AND owner_id=?')
+               ->execute([...$pdata, $pid, $owner['id']]);
+        } else {
+            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,phone,relation,address,note) VALUES (?,?,?,?,?,?,?)')
+               ->execute([$owner['id'], ...$pdata]);
+        }
+        flash('Další vlastník uložen.', 'success');
+    }
+    header('Location: /admin/owner_edit.php?id=' . $owner['id'] . '#dalsi-vlastnici'); exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_person' && $owner) {
+    csrfCheck();
+    $db->prepare('DELETE FROM owner_persons WHERE id=? AND owner_id=?')->execute([(int)$_POST['person_id'], $owner['id']]);
+    flash('Další vlastník smazán.', 'success');
+    header('Location: /admin/owner_edit.php?id=' . $owner['id'] . '#dalsi-vlastnici'); exit;
+}
+
+$ownerPersons = [];
+$editPerson = null;
+if ($owner) {
+    $stmt = $db->prepare('SELECT * FROM owner_persons WHERE owner_id=? ORDER BY id');
+    $stmt->execute([$owner['id']]);
+    $ownerPersons = $stmt->fetchAll();
+    if (isset($_GET['edit_person'])) {
+        foreach ($ownerPersons as $pp) if ((int)$pp['id'] === (int)$_GET['edit_person']) { $editPerson = $pp; break; }
+    }
+}
+
+$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
 
 include __DIR__ . '/../includes/header.php';
 $o = $owner ?? [];
@@ -80,6 +127,7 @@ $o = $owner ?? [];
 <div class="card" style="max-width:640px">
 <form method="POST">
   <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+  <input type="hidden" name="action" value="save_owner">
 
   <div class="form-group">
     <label>Jednotka *</label>
@@ -95,17 +143,29 @@ $o = $owner ?? [];
 
   <div class="form-row">
     <div class="form-group">
-      <label>Jméno a příjmení *</label>
-      <input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>">
+      <label>Vlastnictví</label>
+      <select name="ownership_form">
+        <?php foreach ($ownershipLabels as $val => $lbl): ?>
+          <option value="<?= e($val) ?>" <?= ($o['ownership_form'] ?? 'neuvedeno') === $val ? 'selected' : '' ?>><?= e($lbl) ?></option>
+        <?php endforeach; ?>
+      </select>
     </div>
     <div class="form-group">
       <label>Způsob užívání</label>
       <select name="residence">
-        <?php foreach (['trvalé','pronájem','druhé bydliště','neuvedeno'] as $opt): ?>
+        <?php foreach (['vlastní','pronájem','věcné břemeno','neuvedeno'] as $opt): ?>
           <option value="<?= $opt ?>" <?= ($o['residence'] ?? '') === $opt ? 'selected' : '' ?>><?= $opt ?></option>
         <?php endforeach; ?>
       </select>
     </div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label>Jméno a příjmení (hlavní vlastník) *</label>
+      <input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>">
+    </div>
+    <div class="form-group"></div>
   </div>
 
   <div class="form-row">
@@ -198,5 +258,94 @@ $o = $owner ?? [];
   <button type="submit" class="btn btn-primary">Uložit kartu</button>
 </form>
 </div>
+
+<?php if ($owner): ?>
+<!-- ══ DALŠÍ VLASTNÍCI (SJM / podílové) ═══════════════════════════════════ -->
+<div class="card" id="dalsi-vlastnici" style="max-width:640px;margin-top:1.25rem;border-top:4px solid var(--blue)">
+  <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:.25rem">👥 Další vlastníci</div>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:1rem">
+    Použijte u SJM (manžel/ka) nebo podílového vlastnictví (další spoluvlastníci). Hlavní vlastník zůstává ve formuláři výše.
+  </p>
+
+  <?php if ($ownerPersons): ?>
+  <table class="tbl tbl-edit" style="margin-bottom:1rem">
+    <thead><tr><th>Jméno</th><th>Vztah</th><th>Kontakt</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($ownerPersons as $p): ?>
+    <?php if ($editPerson && (int)$editPerson['id'] === (int)$p['id']): ?>
+    <tr style="background:var(--blue-lt)">
+      <td colspan="4">
+        <form method="POST" style="padding:.5rem 0">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <input type="hidden" name="action" value="save_person">
+          <input type="hidden" name="person_id" value="<?= $p['id'] ?>">
+          <div class="form-row">
+            <div class="form-group"><label>Jméno a příjmení *</label><input type="text" name="p_full_name" required value="<?= e($p['full_name']) ?>"></div>
+            <div class="form-group"><label>Vztah</label><input type="text" name="p_relation" placeholder="manžel/ka, spoluvlastník..." value="<?= e($p['relation'] ?? '') ?>"></div>
+          </div>
+          <div class="form-row">
+            <div class="form-group"><label>E-mail</label><input type="email" name="p_email" value="<?= e($p['email'] ?? '') ?>"></div>
+            <div class="form-group"><label>Telefon</label><input type="tel" name="p_phone" value="<?= e($p['phone'] ?? '') ?>"></div>
+          </div>
+          <div class="form-group"><label>Adresa</label><input type="text" name="p_address" value="<?= e($p['address'] ?? '') ?>"></div>
+          <div class="form-group"><label>Poznámka</label><input type="text" name="p_note" value="<?= e($p['note'] ?? '') ?>"></div>
+          <div style="display:flex;gap:8px">
+            <button type="submit" class="btn btn-primary btn-sm">Uložit</button>
+            <a class="btn btn-secondary btn-sm" href="/admin/owner_edit.php?id=<?= $owner['id'] ?>#dalsi-vlastnici">Zrušit</a>
+          </div>
+        </form>
+      </td>
+    </tr>
+    <?php else: ?>
+    <tr>
+      <td>
+        <strong><?= e($p['full_name']) ?></strong>
+        <?php if ($p['address']): ?><br><small style="color:var(--muted)">🏡 <?= e($p['address']) ?></small><?php endif; ?>
+        <?php if ($p['note']): ?><br><small style="color:var(--muted)"><?= e($p['note']) ?></small><?php endif; ?>
+      </td>
+      <td style="font-size:13px;color:var(--muted)"><?= e($p['relation'] ?? '–') ?></td>
+      <td style="font-size:13px">
+        <?= $p['email'] ? e($p['email']) . '<br>' : '' ?>
+        <?= $p['phone'] ? e($p['phone']) : '' ?>
+      </td>
+      <td style="white-space:nowrap">
+        <a class="btn btn-secondary btn-sm" href="?id=<?= $owner['id'] ?>&edit_person=<?= $p['id'] ?>#dalsi-vlastnici">✏</a>
+        <form method="POST" style="display:inline" onsubmit="return confirm('Smazat?')">
+          <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+          <input type="hidden" name="action" value="delete_person">
+          <input type="hidden" name="person_id" value="<?= $p['id'] ?>">
+          <button type="submit" class="btn btn-danger btn-sm">✕</button>
+        </form>
+      </td>
+    </tr>
+    <?php endif; ?>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php else: ?>
+  <p style="color:var(--muted);font-size:13px;margin-bottom:1rem">Zatím žádní další vlastníci.</p>
+  <?php endif; ?>
+
+  <details <?= !$ownerPersons ? 'open' : '' ?>>
+    <summary style="font-size:13px;color:var(--blue);font-weight:600;cursor:pointer;margin-bottom:.5rem">+ Přidat dalšího vlastníka</summary>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+      <input type="hidden" name="action" value="save_person">
+      <input type="hidden" name="person_id" value="0">
+      <div class="form-row">
+        <div class="form-group"><label>Jméno a příjmení *</label><input type="text" name="p_full_name" required placeholder="Jana Nováková"></div>
+        <div class="form-group"><label>Vztah</label><input type="text" name="p_relation" placeholder="manžel/ka, spoluvlastník..."></div>
+      </div>
+      <div class="form-row">
+        <div class="form-group"><label>E-mail</label><input type="email" name="p_email"></div>
+        <div class="form-group"><label>Telefon</label><input type="tel" name="p_phone"></div>
+      </div>
+      <div class="form-group"><label>Adresa</label><input type="text" name="p_address" placeholder="pokud se liší od hlavního vlastníka"></div>
+      <div class="form-group"><label>Poznámka</label><input type="text" name="p_note"></div>
+      <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
+    </form>
+  </details>
+</div>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

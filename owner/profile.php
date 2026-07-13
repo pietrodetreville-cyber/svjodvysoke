@@ -84,6 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $data = [
         'full_name'     => trim($_POST['full_name'] ?? ''),
         'residence'     => $_POST['residence'] ?? 'neuvedeno',
+        'ownership_form'=> $_POST['ownership_form'] ?? 'neuvedeno',
         'persons_count' => !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
         'email'         => trim($_POST['email'] ?? '') ?: null,
         'email2'        => trim($_POST['email2'] ?? '') ?: null,
@@ -100,36 +101,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     elseif (!$data['gdpr_consent']) flash('Pro uložení je nutný souhlas se zpracováním osobních údajů.', 'error');
     else {
         if ($owner) {
-            $db->prepare('UPDATE owners SET full_name=?,residence=?,persons_count=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
-               ->execute([$data['full_name'],$data['residence'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
+            $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,persons_count=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
+               ->execute([$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],$data['status'],'owner',$owner['id']]);
         } else {
-            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,persons_count,email,email2,primary_email,phone,phone2,primary_phone,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
-               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
+            $db->prepare('INSERT INTO owners (unit_id,full_name,residence,ownership_form,persons_count,email,email2,primary_email,phone,phone2,primary_phone,address,note,gdpr_consent,gdpr_date,status,updated_by_role) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+               ->execute([$user['unit_id'],$data['full_name'],$data['residence'],$data['ownership_form'],$data['persons_count'],$data['email'],$data['email2'],$data['primary_email'],$data['phone'],$data['phone2'],$data['primary_phone'],$data['address'],$data['note'],$data['gdpr_consent'],date('Y-m-d H:i:s'),$data['status'],'owner']);
         }
         flash('Vaše karta byla uložena.', 'success');
     }
     header('Location: /owner/profile.php'); exit;
 }
 
-// Uložit nájemníka
+// Další vlastník (SJM / podílové)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_person' && $owner) {
+    csrfCheck();
+    $pid = (int)($_POST['person_id'] ?? 0);
+    $pdata = [
+        trim($_POST['p_full_name'] ?? ''),
+        trim($_POST['p_email'] ?? '') ?: null,
+        trim($_POST['p_phone'] ?? '') ?: null,
+        trim($_POST['p_relation'] ?? '') ?: null,
+        trim($_POST['p_address'] ?? '') ?: null,
+        trim($_POST['p_note'] ?? '') ?: null,
+    ];
+    if ($pdata[0] !== '') {
+        if ($pid) {
+            $db->prepare('UPDATE owner_persons SET full_name=?,email=?,phone=?,relation=?,address=?,note=? WHERE id=? AND owner_id=?')
+               ->execute([...$pdata, $pid, $owner['id']]);
+        } else {
+            $db->prepare('INSERT INTO owner_persons (owner_id,full_name,email,phone,relation,address,note) VALUES (?,?,?,?,?,?,?)')
+               ->execute([$owner['id'], ...$pdata]);
+        }
+        flash('Další vlastník uložen.', 'success');
+    }
+    header('Location: /owner/profile.php#block-owner'); exit;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_person' && $owner) {
+    csrfCheck();
+    $db->prepare('DELETE FROM owner_persons WHERE id=? AND owner_id=?')->execute([(int)$_POST['person_id'], $owner['id']]);
+    flash('Další vlastník smazán.', 'success');
+    header('Location: /owner/profile.php#block-owner'); exit;
+}
+
+// Uložit nájemníka / osobu s věcným břemenem
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_tenant') {
     csrfCheck();
     $tname = trim($_POST['t_full_name'] ?? '');
+    $tTyp  = in_array($_POST['t_typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['t_typ'] : 'najem';
     $tPersons = !empty($_POST['t_persons_count']) ? (int)$_POST['t_persons_count'] : null;
     if ($tPersons && $owner) $db->prepare('UPDATE owners SET persons_count=? WHERE id=?')->execute([$tPersons, $owner['id']]);
     if ($tname && $user['unit_id']) {
-        $tdata = [$tname, trim($_POST['t_email']??'')?: null, trim($_POST['t_email2']??'')?: null, (int)($_POST['t_primary_email']??1), trim($_POST['t_phone']??'')?: null, trim($_POST['t_phone2']??'')?: null, (int)($_POST['t_primary_phone']??1), $_POST['t_rent_from']?: null, $_POST['t_rent_until']?: null, $tPersons];
+        $tdata = [$tTyp, $tname, trim($_POST['t_email']??'')?: null, trim($_POST['t_email2']??'')?: null, (int)($_POST['t_primary_email']??1), trim($_POST['t_phone']??'')?: null, trim($_POST['t_phone2']??'')?: null, (int)($_POST['t_primary_phone']??1), $_POST['t_rent_from']?: null, $_POST['t_rent_until']?: null, $tPersons];
         if ($tenant) {
-            $db->prepare('UPDATE tenants SET full_name=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,rent_from=?,rent_until=?,persons_count=? WHERE id=?')
+            $db->prepare('UPDATE tenants SET typ=?,full_name=?,email=?,email2=?,primary_email=?,phone=?,phone2=?,primary_phone=?,rent_from=?,rent_until=?,persons_count=? WHERE id=?')
                ->execute([...$tdata, $tenant['id']]);
         } else {
-            $db->prepare('INSERT INTO tenants (unit_id,full_name,email,email2,primary_email,phone,phone2,primary_phone,rent_from,rent_until,persons_count) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
+            $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,email2,primary_email,phone,phone2,primary_phone,rent_from,rent_until,persons_count) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
                ->execute([$user['unit_id'], ...$tdata]);
         }
-        flash('Nájemník uložen.', 'success');
+        flash('Uloženo.', 'success');
     }
     header('Location: /owner/profile.php'); exit;
 }
+
+$ownerPersons = [];
+if ($owner) {
+    $stmt = $db->prepare('SELECT * FROM owner_persons WHERE owner_id=? ORDER BY id');
+    $stmt->execute([$owner['id']]);
+    $ownerPersons = $stmt->fetchAll();
+}
+$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -194,6 +236,9 @@ include __DIR__ . '/../includes/header.php';
         <?php if ($mainEmail): ?><div class="summary-val">✉️ <?= e($mainEmail) ?><?php if (($o['email'] ?? '') && ($o['email2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
         <?php if ($mainPhone): ?><div class="summary-val">📞 <?= e($mainPhone) ?><?php if (($o['phone'] ?? '') && ($o['phone2'] ?? '')): ?><span class="primary-badge">+1</span><?php endif; ?></div><?php endif; ?>
         <?php if ($o['address'] ?? ''): ?><div class="summary-val" style="font-size:13px;color:var(--muted)">🏡 <?= e($o['address']) ?></div><?php endif; ?>
+        <?php foreach ($ownerPersons as $p): ?>
+          <div class="summary-val" style="font-size:13px;color:var(--muted)">👥 <?= e($p['full_name']) ?><?= $p['relation'] ? ' ('.e($p['relation']).')' : '' ?></div>
+        <?php endforeach; ?>
       <?php else: ?>
         <div style="color:var(--muted);font-size:13px">Karta není vyplněna — klikněte Editovat</div>
       <?php endif; ?>
@@ -202,17 +247,28 @@ include __DIR__ . '/../includes/header.php';
       <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="save_owner">
-        <div class="form-group"><label>Jméno a příjmení *</label><input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>"></div>
+        <div class="form-group"><label>Jméno a příjmení (hlavní vlastník) *</label><input type="text" name="full_name" required value="<?= e($o['full_name'] ?? '') ?>"></div>
         <div class="form-row">
+          <div class="form-group">
+            <label>Vlastnictví</label>
+            <select name="ownership_form">
+              <?php foreach ($ownershipLabels as $val => $lbl): ?>
+                <option value="<?= e($val) ?>" <?= ($o['ownership_form']??'neuvedeno')===$val?'selected':'' ?>><?= e($lbl) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
           <div class="form-group">
             <label>Způsob užívání jednotky</label>
             <select name="residence">
-              <?php foreach (['trvalé','pronájem','druhé bydliště','neuvedeno'] as $opt): ?>
+              <?php foreach (['vlastní','pronájem','věcné břemeno','neuvedeno'] as $opt): ?>
                 <option value="<?= $opt ?>" <?= ($o['residence']??'neuvedeno')===$opt?'selected':'' ?>><?= $opt ?></option>
               <?php endforeach; ?>
             </select>
           </div>
-          <div class="form-group"><label>Počet osob</label><input type="number" name="persons_count" min="0" max="20" value="<?= e($o['persons_count'] ?? '') ?>"></div>
+        </div>
+        <div class="form-row">
+          <div class="form-group"><label>Počet osob v jednotce</label><input type="number" name="persons_count" min="0" max="20" value="<?= e($o['persons_count'] ?? '') ?>"></div>
+          <div class="form-group"></div>
         </div>
         <div class="contact-box">
           <div class="contact-box-label">Kontaktní údaje</div>
@@ -246,13 +302,54 @@ include __DIR__ . '/../includes/header.php';
           <button type="button" class="btn btn-secondary" onclick="toggleBlock('block-owner')">Zrušit</button>
         </div>
       </form>
+
+      <?php if ($owner): ?>
+      <!-- Další vlastníci (SJM / podílové) -->
+      <div style="border-top:1px solid var(--border);margin-top:1.25rem;padding-top:1rem">
+        <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:.5rem">👥 Další vlastníci (SJM / podílové)</div>
+        <?php if ($ownerPersons): ?>
+          <?php foreach ($ownerPersons as $p): ?>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-lt);border-radius:var(--radius-sm);padding:.5rem .75rem;margin-bottom:.5rem;font-size:13px">
+            <div>
+              <strong><?= e($p['full_name']) ?></strong><?= $p['relation'] ? ' — '.e($p['relation']) : '' ?>
+              <?php if ($p['email'] || $p['phone']): ?><br><span style="color:var(--muted)"><?= e($p['email'] ?: '') ?><?= $p['email'] && $p['phone'] ? ' · ' : '' ?><?= e($p['phone'] ?: '') ?></span><?php endif; ?>
+            </div>
+            <form method="POST" onsubmit="return confirm('Smazat?')">
+              <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+              <input type="hidden" name="action" value="delete_person">
+              <input type="hidden" name="person_id" value="<?= $p['id'] ?>">
+              <button type="submit" class="btn btn-danger btn-sm">✕</button>
+            </form>
+          </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+        <details>
+          <summary style="font-size:13px;color:var(--blue);font-weight:600;cursor:pointer;margin-bottom:.5rem">+ Přidat dalšího vlastníka</summary>
+          <form method="POST">
+            <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+            <input type="hidden" name="action" value="save_person">
+            <input type="hidden" name="person_id" value="0">
+            <div class="form-row">
+              <div class="form-group"><label>Jméno a příjmení *</label><input type="text" name="p_full_name" required></div>
+              <div class="form-group"><label>Vztah</label><input type="text" name="p_relation" placeholder="manžel/ka, spoluvlastník..."></div>
+            </div>
+            <div class="form-row">
+              <div class="form-group"><label>E-mail</label><input type="email" name="p_email"></div>
+              <div class="form-group"><label>Telefon</label><input type="tel" name="p_phone"></div>
+            </div>
+            <div class="form-group"><label>Adresa</label><input type="text" name="p_address" placeholder="pokud se liší"></div>
+            <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
+          </form>
+        </details>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
 
   <!-- BLOK NÁJEMNÍK -->
   <div class="block block-tenant" id="block-tenant">
     <div class="block-header">
-      <span class="block-label">🏠 Nájemník</span>
+      <span class="block-label"><?= ($t['typ'] ?? 'najem') === 'vecne_bremeno' ? '⚖️ Věcné břemeno' : '🏠 Nájemník' ?></span>
       <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-tenant')">Editovat</button>
     </div>
     <div class="summary-body" id="summary-tenant">
@@ -270,13 +367,20 @@ include __DIR__ . '/../includes/header.php';
           </div>
         <?php endif; ?>
       <?php else: ?>
-        <div style="color:var(--muted);font-size:13px">Žádný nájemník — klikněte Editovat</div>
+        <div style="color:var(--muted);font-size:13px">Jednotka je ve vlastním užívání — klikněte Editovat pro zadání nájemníka nebo osoby s věcným břemenem</div>
       <?php endif; ?>
     </div>
     <div class="edit-form" id="edit-tenant">
       <form method="POST">
         <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
         <input type="hidden" name="action" value="save_tenant">
+        <div class="form-group">
+          <label>Typ</label>
+          <select name="t_typ">
+            <option value="najem" <?= ($t['typ']??'najem')==='najem'?'selected':'' ?>>Nájem</option>
+            <option value="vecne_bremeno" <?= ($t['typ']??'')==='vecne_bremeno'?'selected':'' ?>>Věcné břemeno</option>
+          </select>
+        </div>
         <div class="form-group"><label>Jméno a příjmení</label><input type="text" name="t_full_name" value="<?= e($t['full_name'] ?? '') ?>"></div>
         <div class="form-group">
           <label>Počet osob <span style="color:var(--blue);font-size:11px">(nadřazený)</span></label>

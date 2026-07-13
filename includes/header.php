@@ -169,7 +169,7 @@ if ('serviceWorker' in navigator) {
       <?php if ($isSuperAdmin): ?>
       <a href="/admin/sql_console.php" class="<?= str_contains($_SERVER['REQUEST_URI'],'sql_console') ? 'active' : '' ?>">SQL</a>
       <?php endif; ?>
-      <a href="/admin/tenants.php" class="<?= str_contains($_SERVER['REQUEST_URI'],'tenants') ? 'active' : '' ?>">Nájemníci</a>
+      <a href="/admin/tenants.php" class="<?= str_contains($_SERVER['REQUEST_URI'],'tenants') ? 'active' : '' ?>">Uživatelé jednotky</a>
       <a href="/admin/residents.php" class="<?= str_contains($_SERVER['REQUEST_URI'],'residents') ? 'active' : '' ?>">Obyvatelé</a>
       <a href="/admin/users.php" class="<?= str_contains($_SERVER['REQUEST_URI'],'users') ? 'active' : '' ?>">Uživatelé</a>
     <?php elseif ($isTenant): ?>

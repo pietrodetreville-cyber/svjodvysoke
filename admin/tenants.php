@@ -1,19 +1,21 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
 $user = requireAdmin();
-$pageTitle = 'Nájemníci';
+$pageTitle = 'Uživatelé jednotky';
 $db = db();
+$typLabels = ['najem' => 'Nájem', 'vecne_bremeno' => 'Věcné břemeno'];
 
-// Přidat nájemníka
+// Přidat
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
     csrfCheck();
     $unitId = (int)$_POST['unit_id'];
     $name   = trim($_POST['full_name'] ?? '');
+    $typ    = in_array($_POST['typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['typ'] : 'najem';
     if ($unitId && $name) {
         $db->prepare(
-            'INSERT INTO tenants (unit_id,full_name,email,phone,rent_from,rent_until,persons_count,note) VALUES (?,?,?,?,?,?,?,?)'
+            'INSERT INTO tenants (unit_id,typ,full_name,email,phone,rent_from,rent_until,persons_count,note) VALUES (?,?,?,?,?,?,?,?,?)'
         )->execute([
-            $unitId, $name,
+            $unitId, $typ, $name,
             trim($_POST['email'] ?? '') ?: null,
             trim($_POST['phone'] ?? '') ?: null,
             $_POST['rent_from'] ?: null,
@@ -21,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
             !empty($_POST['persons_count']) ? (int)$_POST['persons_count'] : null,
             trim($_POST['note'] ?? '') ?: null,
         ]);
-        flash('Nájemník přidán.', 'success');
+        flash('Uživatel přidán.', 'success');
     }
     header('Location: /admin/tenants.php'); exit;
 }
@@ -29,10 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
 // Upravit
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit') {
     csrfCheck();
+    $typ = in_array($_POST['typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['typ'] : 'najem';
     $db->prepare(
-        'UPDATE tenants SET unit_id=?,full_name=?,email=?,phone=?,rent_from=?,rent_until=?,persons_count=?,note=? WHERE id=?'
+        'UPDATE tenants SET unit_id=?,typ=?,full_name=?,email=?,phone=?,rent_from=?,rent_until=?,persons_count=?,note=? WHERE id=?'
     )->execute([
-        (int)$_POST['unit_id'],
+        (int)$_POST['unit_id'], $typ,
         trim($_POST['full_name']),
         trim($_POST['email'] ?? '') ?: null,
         trim($_POST['phone'] ?? '') ?: null,
@@ -42,7 +45,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit'
         trim($_POST['note'] ?? '') ?: null,
         (int)$_POST['id'],
     ]);
-    flash('Nájemník upraven.', 'success');
+    flash('Uživatel upraven.', 'success');
     header('Location: /admin/tenants.php'); exit;
 }
 
@@ -50,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit'
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     csrfCheck();
     $db->prepare('DELETE FROM tenants WHERE id=?')->execute([(int)$_POST['id']]);
-    flash('Nájemník smazán.', 'success');
+    flash('Uživatel smazán.', 'success');
     header('Location: /admin/tenants.php'); exit;
 }
 
@@ -78,7 +81,8 @@ $expiring = array_filter($tenants, fn($t) => $t['rent_until'] && strtotime($t['r
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="page-hd"><h1>Nájemníci</h1></div>
+<div class="page-hd"><h1>Uživatelé jednotky</h1></div>
+<p style="font-size:13px;color:var(--muted);margin:-.75rem 0 1.25rem">Nájemníci a osoby s věcným břemenem — jednotka nemusí být ve vlastním užívání vlastníka.</p>
 
 <!-- Statistiky -->
 <div class="metrics" style="margin-bottom:1.25rem">
@@ -89,7 +93,7 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Formulář -->
 <div class="card" style="max-width:680px;margin-bottom:1.5rem">
-  <div class="card-title"><?= $editing ? 'Upravit nájemníka' : 'Přidat nájemníka' ?></div>
+  <div class="card-title"><?= $editing ? 'Upravit uživatele' : 'Přidat uživatele' ?></div>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <input type="hidden" name="action" value="<?= $editing ? 'edit' : 'add' ?>">
@@ -108,9 +112,21 @@ include __DIR__ . '/../includes/header.php';
         </select>
       </div>
       <div class="form-group">
+        <label>Typ</label>
+        <select name="typ">
+          <?php foreach ($typLabels as $val => $lbl): ?>
+            <option value="<?= $val ?>" <?= ($editing['typ'] ?? 'najem') === $val ? 'selected' : '' ?>><?= $lbl ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
         <label>Jméno a příjmení *</label>
         <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? '') ?>">
       </div>
+      <div class="form-group"></div>
     </div>
 
     <div class="form-row">
@@ -155,16 +171,17 @@ include __DIR__ . '/../includes/header.php';
 
 <!-- Seznam -->
 <div class="card">
-  <div class="card-title">Seznam nájemníků (<?= $total ?>)</div>
+  <div class="card-title">Seznam uživatelů (<?= $total ?>)</div>
   <?php if (!$tenants): ?>
-    <p style="color:var(--muted);font-size:14px">Zatím žádní nájemníci.</p>
+    <p style="color:var(--muted);font-size:14px">Zatím žádní uživatelé.</p>
   <?php else: ?>
   <div class="tbl-wrap">
   <table class="tbl">
     <thead>
       <tr>
         <th>Jednotka</th>
-        <th>Nájemník</th>
+        <th>Typ</th>
+        <th>Jméno</th>
         <th>E-mail</th>
         <th>Telefon</th>
         <th>Osoby</th>
@@ -182,6 +199,7 @@ include __DIR__ . '/../includes/header.php';
     ?>
     <tr>
       <td><strong><?= e($t['unit_label']) ?></strong><br><small style="color:var(--muted)"><?= e($t['unit_type']) ?></small></td>
+      <td><span class="badge <?= $t['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>"><?= e($typLabels[$t['typ']] ?? $t['typ']) ?></span></td>
       <td>
         <?= e($t['full_name']) ?>
         <?php if ($t['note']): ?><br><small style="color:var(--muted)"><?= e($t['note']) ?></small><?php endif; ?>

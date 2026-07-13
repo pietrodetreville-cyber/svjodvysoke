@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS owners (
   phone2 VARCHAR(30),
   primary_phone TINYINT(1) DEFAULT 1 COMMENT '1=phone je hlavní, 2=phone2 je hlavní',
   address VARCHAR(200) COMMENT 'korespondenční adresa, pokud se liší',
-  residence ENUM('trvalé','pronájem','druhé bydliště','neuvedeno') DEFAULT 'neuvedeno',
+  residence ENUM('vlastní','pronájem','věcné břemeno','neuvedeno') DEFAULT 'neuvedeno',
   ownership_form ENUM('bezpodílové','společné jmění manželů','podílové','neuvedeno') DEFAULT 'neuvedeno',
   persons_count TINYINT NULL COMMENT 'počet osob žijících v jednotce',
   share_pct DECIMAL(10,9) NULL COMMENT 'procentní podíl na domě',
@@ -94,15 +94,18 @@ CREATE TABLE IF NOT EXISTS owner_persons (
   email VARCHAR(120),
   phone VARCHAR(30),
   relation VARCHAR(80),
+  address VARCHAR(200),
+  note TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   FOREIGN KEY (owner_id) REFERENCES owners(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Nájemníci
+-- Nájemníci a osoby s věcným břemenem (uživatelé jednotky, kteří nejsou vlastníky)
 CREATE TABLE IF NOT EXISTS tenants (
   id INT AUTO_INCREMENT PRIMARY KEY,
   unit_id INT NOT NULL,
+  typ ENUM('najem','vecne_bremeno') NOT NULL DEFAULT 'najem',
   full_name VARCHAR(120) NOT NULL,
   email VARCHAR(120),
   email2 VARCHAR(120),
