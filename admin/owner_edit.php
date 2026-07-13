@@ -113,9 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $tname = trim($_POST['t_full_name'] ?? '');
     $tTyp  = in_array($_POST['t_typ'] ?? '', ['najem','vecne_bremeno']) ? $_POST['t_typ'] : 'najem';
     if ($tname) {
-        $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,email,notify_email,phone,whatsapp) VALUES (?,?,?,?,?,?,?)')
+        $db->prepare('INSERT INTO tenants (unit_id,typ,full_name,persons_count,email,notify_email,phone,whatsapp) VALUES (?,?,?,?,?,?,?,?)')
            ->execute([
                $owner['unit_id'], $tTyp, $tname,
+               !empty($_POST['t_persons_count']) ? (int)$_POST['t_persons_count'] : null,
                trim($_POST['t_email'] ?? '') ?: null, isset($_POST['t_notify_email']) ? 1 : 0,
                trim($_POST['t_phone'] ?? '') ?: null, isset($_POST['t_whatsapp']) ? 1 : 0,
            ]);
@@ -223,7 +224,7 @@ $o = $owner ?? [];
         <input type="hidden" name="t_typ" id="usage-typ-field" value="<?= ($o['residence'] ?? '') === 'věcné břemeno' ? 'vecne_bremeno' : 'najem' ?>">
         <div class="form-row">
           <div class="form-group" style="margin:0"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
-          <div class="form-group" style="margin:0"></div>
+          <div class="form-group" style="margin:0"><label style="font-size:11px">Počet osob</label><input type="number" name="t_persons_count" min="1" max="20" style="max-width:100px"></div>
         </div>
         <div class="form-row" style="margin-top:.5rem">
           <div class="form-group" style="margin:0"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
