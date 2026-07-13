@@ -16,24 +16,23 @@ $pageTitle = 'Popis jednotky — ' . $unit['label'];
 // ── POST handlery ─────────────────────────────────────────────────────────
 
 // Uložit základní parametry (sloučeno: identifikace/podíl z units.php + technické np/dispozice/výměra)
+// Pozn.: floor/area_m2 jsou opuštěné duplicity np/vymera_m2 - už se tu needitují (viz migrace dat).
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_info') {
     csrfCheck();
     $type = $_POST['type'];
     $isGarage = ($type !== 'byt');
 
     if ($isGarage) {
-        $db->prepare("UPDATE units SET label=?, type=?, floor=NULL, area_m2=NULL, share_numerator=NULL, share_denominator=NULL WHERE id=?")
+        $db->prepare("UPDATE units SET label=?, type=?, share_numerator=NULL, share_denominator=NULL WHERE id=?")
            ->execute([trim($_POST['label']), $type, $unitId]);
     } else {
         $db->prepare('UPDATE units SET linked_unit_id=NULL WHERE linked_unit_id=?')->execute([$unitId]);
         if (!empty($_POST['garage_unit_id'])) {
             $db->prepare('UPDATE units SET linked_unit_id=? WHERE id=?')->execute([$unitId, (int)$_POST['garage_unit_id']]);
         }
-        $db->prepare("UPDATE units SET label=?, type=?, floor=?, area_m2=?, share_numerator=?, share_denominator=? WHERE id=?")
+        $db->prepare("UPDATE units SET label=?, type=?, share_numerator=?, share_denominator=? WHERE id=?")
            ->execute([
                trim($_POST['label']), $type,
-               $_POST['floor'] !== '' ? (int)$_POST['floor'] : null,
-               $_POST['area_m2'] !== '' ? (float)$_POST['area_m2'] : null,
                $_POST['share_num'] !== '' ? (int)$_POST['share_num'] : null,
                $_POST['share_den'] !== '' ? (int)$_POST['share_den'] : null,
                $unitId,
@@ -235,14 +234,6 @@ include __DIR__ . '/../includes/header.php';
 
       <div id="detail-byt-fields" style="<?= $isGarage ? 'display:none' : '' ?>">
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
-          <div class="form-group" style="min-width:90px">
-            <label>Patro (evidence)</label>
-            <input type="number" name="floor" value="<?= e($unit['floor'] ?? '') ?>">
-          </div>
-          <div class="form-group" style="min-width:100px">
-            <label>m² (evidence)</label>
-            <input type="number" step="0.01" name="area_m2" value="<?= e($unit['area_m2'] ?? '') ?>">
-          </div>
           <div class="form-group" style="min-width:100px">
             <label>Podíl – čitatel</label>
             <input type="number" name="share_num" value="<?= e($unit['share_numerator'] ?? '') ?>">

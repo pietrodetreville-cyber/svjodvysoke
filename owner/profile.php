@@ -165,12 +165,12 @@ include __DIR__ . '/../includes/header.php';
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem">
   <?php if ($unit): ?>
   <div style="background:var(--blue-lt);border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--blue);font-weight:500">
-    🏠 <strong><?= e($unit['label']) ?></strong> (<?= e($unit['type']) ?>)<?= $unit['area_m2'] ? ' · '.$unit['area_m2'].' m²' : '' ?>
+    🏠 <strong><?= e($unit['label']) ?></strong> (<?= e($unit['type']) ?>)<?= $unit['vymera_m2'] ? ' · '.$unit['vymera_m2'].' m²' : '' ?>
   </div>
   <?php endif; ?>
   <?php if ($garage): ?>
   <div style="background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--amber);font-weight:500">
-    🚗 Garáž: <strong><?= e($garage['label']) ?></strong><?= $garage['area_m2'] ? ' · '.$garage['area_m2'].' m²' : '' ?>
+    🚗 Garáž: <strong><?= e($garage['label']) ?></strong><?= $garage['vymera_m2'] ? ' · '.$garage['vymera_m2'].' m²' : '' ?>
   </div>
   <?php endif; ?>
 </div>

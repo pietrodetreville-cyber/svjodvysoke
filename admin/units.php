@@ -8,11 +8,9 @@ $db = db();
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add') {
     csrfCheck();
     $type = $_POST['type'];
-    $db->prepare('INSERT INTO units (label,type,floor,area_m2,share_numerator,share_denominator) VALUES (?,?,?,?,?,?)')
+    $db->prepare('INSERT INTO units (label,type,share_numerator,share_denominator) VALUES (?,?,?,?)')
        ->execute([
            trim($_POST['label']), $type,
-           $_POST['floor'] !== '' ? (int)$_POST['floor'] : null,
-           $type === 'byt' && $_POST['area_m2'] !== '' ? (float)$_POST['area_m2'] : null,
            $type === 'byt' && $_POST['share_num'] !== '' ? (int)$_POST['share_num'] : null,
            $type === 'byt' && $_POST['share_den'] !== '' ? (int)$_POST['share_den'] : null,
        ]);
@@ -381,10 +379,6 @@ include __DIR__ . '/../includes/header.php';
               </div>
               <div id="add-byt-fields">
                 <div class="form-row">
-                  <div class="form-group"><label>Patro</label><input type="number" name="floor"></div>
-                  <div class="form-group"><label>m²</label><input type="number" step="0.01" name="area_m2"></div>
-                </div>
-                <div class="form-row">
                   <div class="form-group"><label>Podíl – čitatel</label><input type="number" name="share_num"></div>
                   <div class="form-group"><label>Podíl – jmenovatel</label><input type="number" name="share_den"></div>
                 </div>
@@ -411,8 +405,8 @@ include __DIR__ . '/../includes/header.php';
       <tr id="row-<?= $u['id'] ?>">
         <td><strong><?= e($u['label']) ?></strong></td>
         <td><?= e($u['type']) ?></td>
-        <td><?= $u['floor'] !== null ? $u['floor'].'. p.' : '–' ?></td>
-        <td><?= $u['area_m2'] ?? '–' ?></td>
+        <td><?= $u['np'] !== null ? $u['np'].'. NP' : '–' ?></td>
+        <td><?= $u['vymera_m2'] ?? '–' ?></td>
         <td><?= $u['share_numerator'] ? e($u['share_numerator']).'/'.$u['share_denominator'] : '–' ?></td>
         <td><?= $u['share_pct'] !== null ? $u['share_pct'].' %' : '–' ?></td>
         <td style="color:var(--muted);font-size:13px"><?= e($u['owner_name'] ?: '—') ?></td>
@@ -628,10 +622,6 @@ include __DIR__ . '/../includes/header.php';
       </div>
       <div class="mob-byt-fields">
         <div class="form-row">
-          <div class="form-group"><label>Patro</label><input type="number" name="floor"></div>
-          <div class="form-group"><label>m²</label><input type="number" step="0.01" name="area_m2"></div>
-        </div>
-        <div class="form-row">
           <div class="form-group"><label>Podíl – čitatel</label><input type="number" name="share_num"></div>
           <div class="form-group"><label>Podíl – jmenovatel</label><input type="number" name="share_den"></div>
         </div>
@@ -669,8 +659,8 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <div class="unit-drawer" id="drawer-<?= $u['id'] ?>">
     <div style="font-size:12px;color:var(--muted);margin-bottom:.75rem">
-      <?php if ($u['floor'] !== null): ?>Patro: <?= $u['floor'] ?> &nbsp;<?php endif; ?>
-      <?php if ($u['area_m2']): ?>m²: <?= $u['area_m2'] ?> &nbsp;<?php endif; ?>
+      <?php if ($u['np'] !== null): ?>Podlaží: <?= $u['np'] ?>. NP &nbsp;<?php endif; ?>
+      <?php if ($u['vymera_m2']): ?>m²: <?= $u['vymera_m2'] ?> &nbsp;<?php endif; ?>
       <?php if ($u['share_numerator']): ?>Podíl: <?= $u['share_numerator'].'/'.$u['share_denominator'] ?><?php endif; ?>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
