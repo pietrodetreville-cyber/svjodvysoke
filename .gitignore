@@ -2,4 +2,5 @@
 .env.production
 uploads/documents/*
 !uploads/documents/.gitkeep
+!uploads/documents/.htaccess
 *.log

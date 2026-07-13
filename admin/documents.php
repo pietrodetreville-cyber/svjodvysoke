@@ -4,9 +4,6 @@ $user = requireAdmin();
 $pageTitle = 'Archiv dokumentů';
 $db = db();
 
-define('UPLOAD_DIR', '/home/html/drymtym.cz/public_html/uploads/documents/');
-define('UPLOAD_URL', 'https://drymtym.cz/uploads/documents/');
-
 $categories = [
     'smlouvy'  => 'Smlouvy s dodavateli',
     'pojisteni'=> 'Pojištění',

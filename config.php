@@ -20,6 +20,11 @@ define('SITE_URL',  getenv('SITE_URL')  ?: 'https://odvysoke.drymtym.cz');
 
 define('SECRET_KEY', getenv('SECRET_KEY'));
 
+// Nahrané dokumenty: lokálně/v defaultu vedle projektu, na produkci
+// přebito v .env.production (viz poznámka tam k ověření správné cesty).
+define('UPLOAD_DIR', getenv('UPLOAD_DIR') ?: __DIR__ . '/uploads/documents/');
+define('UPLOAD_URL', getenv('UPLOAD_URL') ?: rtrim(SITE_URL, '/') . '/uploads/documents/');
+
 date_default_timezone_set('Europe/Prague');
 
 // Gmail SMTP konfigurace
