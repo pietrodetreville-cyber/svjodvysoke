@@ -15,9 +15,31 @@ $pageTitle = 'Popis jednotky — ' . $unit['label'];
 
 // ── POST handlery ─────────────────────────────────────────────────────────
 
-// Uložit základní info
+// Uložit základní parametry (sloučeno: identifikace/podíl z units.php + technické np/dispozice/výměra)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_info') {
     csrfCheck();
+    $type = $_POST['type'];
+    $isGarage = ($type !== 'byt');
+
+    if ($isGarage) {
+        $db->prepare("UPDATE units SET label=?, type=?, floor=NULL, area_m2=NULL, share_numerator=NULL, share_denominator=NULL WHERE id=?")
+           ->execute([trim($_POST['label']), $type, $unitId]);
+    } else {
+        $db->prepare('UPDATE units SET linked_unit_id=NULL WHERE linked_unit_id=?')->execute([$unitId]);
+        if (!empty($_POST['garage_unit_id'])) {
+            $db->prepare('UPDATE units SET linked_unit_id=? WHERE id=?')->execute([$unitId, (int)$_POST['garage_unit_id']]);
+        }
+        $db->prepare("UPDATE units SET label=?, type=?, floor=?, area_m2=?, share_numerator=?, share_denominator=? WHERE id=?")
+           ->execute([
+               trim($_POST['label']), $type,
+               $_POST['floor'] !== '' ? (int)$_POST['floor'] : null,
+               $_POST['area_m2'] !== '' ? (float)$_POST['area_m2'] : null,
+               $_POST['share_num'] !== '' ? (int)$_POST['share_num'] : null,
+               $_POST['share_den'] !== '' ? (int)$_POST['share_den'] : null,
+               $unitId,
+           ]);
+    }
+
     $db->prepare("UPDATE units SET np=?, dispozice=?, vymera_m2=?, vymera_pozn=? WHERE id=?")
        ->execute([
            $_POST['np'] !== '' ? (int)$_POST['np'] : null,
@@ -26,7 +48,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
            trim($_POST['vymera_pozn'] ?? '') ?: null,
            $unitId,
        ]);
-    flash('Základní info uloženo.', 'success');
+
+    flash('Základní parametry uloženy.', 'success');
     header("Location: /admin/unit_detail.php?id=$unitId"); exit;
 }
 
@@ -89,6 +112,16 @@ $totalVymera = array_sum(array_column($rooms, 'vymera_m2'));
 
 $npLabels = [1=>'1. NP (přízemí)',2=>'2. NP (1. patro)',3=>'3. NP (2. patro)',4=>'4. NP (3. patro)',5=>'5. NP (4. patro)',6=>'6. NP (5. patro)',7=>'7. NP (6. patro)',8=>'8. NP (7. patro)'];
 
+// Identifikace/podíl/garáž (dřív editovatelné jen z units.php, teď sloučeno sem)
+$isGarage = ($unit['type'] !== 'byt');
+$allUnits = $db->query("SELECT id, label, type, linked_unit_id FROM units ORDER BY label")->fetchAll();
+$linkedGarage = null;
+foreach ($allUnits as $uu) {
+    if ($uu['linked_unit_id'] == $unitId && $uu['type'] !== 'byt') { $linkedGarage = $uu; break; }
+}
+$sharePct = ($unit['share_numerator'] && $unit['share_denominator'] > 0)
+    ? round($unit['share_numerator'] / $unit['share_denominator'] * 100, 4) : null;
+
 include __DIR__ . '/../includes/header.php';
 ?>
 
@@ -126,7 +159,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<!-- ══ ZÁKLADNÍ INFO ══════════════════════════════════════════════════════ -->
+<!-- ══ ZÁKLADNÍ PARAMETRY ═════════════════════════════════════════════════ -->
 <div class="card section-card" style="border-top:4px solid var(--blue)">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
     <div style="font-size:14px;font-weight:600;color:var(--blue)">📋 Základní parametry</div>
@@ -135,6 +168,23 @@ include __DIR__ . '/../includes/header.php';
 
   <!-- Zobrazení -->
   <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:1rem;margin-bottom:.5rem">
+    <div style="background:var(--gray-lt);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Označení / typ</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--blue)"><?= e($unit['label']) ?></div>
+      <div style="font-size:11px;color:var(--muted)"><?= e($unit['type']) ?></div>
+    </div>
+    <?php if (!$isGarage): ?>
+    <div style="background:var(--gray-lt);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Podíl na SVJ</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--blue)">
+        <?= $unit['share_numerator'] ? e($unit['share_numerator']).'/'.e($unit['share_denominator']) : '—' ?>
+      </div>
+      <?php if ($sharePct !== null): ?><div style="font-size:11px;color:var(--muted)"><?= $sharePct ?> %</div><?php endif; ?>
+    </div>
+    <div style="background:var(--gray-lt);border-radius:8px;padding:10px 14px">
+      <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Garáž</div>
+      <div style="font-size:1.2rem;font-weight:700;color:var(--blue)"><?= $linkedGarage ? e($linkedGarage['label']) : '—' ?></div>
+    </div>
     <div style="background:var(--gray-lt);border-radius:8px;padding:10px 14px">
       <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Podlaží</div>
       <div style="font-size:1.2rem;font-weight:700;color:var(--blue)"><?= $unit['np'] ? $npLabels[$unit['np']] ?? $unit['np'].'. NP' : '—' ?></div>
@@ -156,6 +206,11 @@ include __DIR__ . '/../includes/header.php';
       <div style="font-size:1.2rem;font-weight:700;color:var(--green)"><?= number_format($totalVymera, 2, ',', ' ') ?> m²</div>
     </div>
     <?php endif; ?>
+    <?php else: ?>
+    <div style="background:#FFF8E6;border-radius:8px;padding:10px 14px;grid-column:1/-1">
+      <div style="font-size:12px;color:var(--amber)">🚗 Evidenční jednotka — podíl, výměra a technický popis se neevidují.</div>
+    </div>
+    <?php endif; ?>
   </div>
 
   <!-- Editační formulář (skrytý) -->
@@ -163,33 +218,89 @@ include __DIR__ . '/../includes/header.php';
     <form method="POST">
       <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
       <input type="hidden" name="action" value="save_info">
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div class="form-group" style="min-width:180px">
-          <label>Podlaží (NP)</label>
-          <select name="np">
-            <option value="">— neuvedeno —</option>
-            <?php foreach ($npLabels as $n => $lbl): ?>
-              <option value="<?= $n ?>" <?= ($unit['np'] ?? '') == $n ? 'selected' : '' ?>><?= $lbl ?></option>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+        <div class="form-group" style="min-width:140px">
+          <label>Označení *</label>
+          <input type="text" name="label" required value="<?= e($unit['label']) ?>">
+        </div>
+        <div class="form-group" style="min-width:120px">
+          <label>Typ</label>
+          <select name="type" id="detail-type" onchange="toggleDetailFields()">
+            <?php foreach (['byt','garáž','sklep','jiné'] as $t): ?>
+              <option value="<?= $t ?>" <?= $unit['type']===$t?'selected':'' ?>><?= $t ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div class="form-group" style="min-width:100px">
-          <label>Dispozice</label>
-          <input type="text" name="dispozice" placeholder="1+kk" maxlength="20" value="<?= e($unit['dispozice'] ?? '') ?>">
-        </div>
-        <div class="form-group" style="min-width:100px">
-          <label>Výměra (m²)</label>
-          <input type="number" step="0.01" name="vymera_m2" placeholder="54.40" value="<?= e($unit['vymera_m2'] ?? '') ?>">
-        </div>
-        <div class="form-group" style="min-width:200px;flex:1">
-          <label>Poznámka k výměře</label>
-          <input type="text" name="vymera_pozn" placeholder="mimo lodžie a sklep" value="<?= e($unit['vymera_pozn'] ?? '') ?>">
-        </div>
-        <button type="submit" class="btn btn-primary">Uložit</button>
       </div>
+
+      <div id="detail-byt-fields" style="<?= $isGarage ? 'display:none' : '' ?>">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:.75rem">
+          <div class="form-group" style="min-width:90px">
+            <label>Patro (evidence)</label>
+            <input type="number" name="floor" value="<?= e($unit['floor'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:100px">
+            <label>m² (evidence)</label>
+            <input type="number" step="0.01" name="area_m2" value="<?= e($unit['area_m2'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:100px">
+            <label>Podíl – čitatel</label>
+            <input type="number" name="share_num" value="<?= e($unit['share_numerator'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:100px">
+            <label>Podíl – jmenovatel</label>
+            <input type="number" name="share_den" value="<?= e($unit['share_denominator'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:160px">
+            <label>Přiřazená garáž</label>
+            <select name="garage_unit_id">
+              <option value="">— bez garáže —</option>
+              <?php foreach ($allUnits as $gu): if ($gu['type']==='byt') continue; ?>
+                <option value="<?= $gu['id'] ?>" <?= ($linkedGarage && $linkedGarage['id']==$gu['id'])?'selected':'' ?>>🚗 <?= e($gu['label']) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+          <div class="form-group" style="min-width:180px">
+            <label>Podlaží (NP)</label>
+            <select name="np">
+              <option value="">— neuvedeno —</option>
+              <?php foreach ($npLabels as $n => $lbl): ?>
+                <option value="<?= $n ?>" <?= ($unit['np'] ?? '') == $n ? 'selected' : '' ?>><?= $lbl ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <div class="form-group" style="min-width:100px">
+            <label>Dispozice</label>
+            <input type="text" name="dispozice" placeholder="1+kk" maxlength="20" value="<?= e($unit['dispozice'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:100px">
+            <label>Výměra (m²)</label>
+            <input type="number" step="0.01" name="vymera_m2" placeholder="54.40" value="<?= e($unit['vymera_m2'] ?? '') ?>">
+          </div>
+          <div class="form-group" style="min-width:200px;flex:1">
+            <label>Poznámka k výměře</label>
+            <input type="text" name="vymera_pozn" placeholder="mimo lodžie a sklep" value="<?= e($unit['vymera_pozn'] ?? '') ?>">
+          </div>
+        </div>
+      </div>
+      <div id="detail-garage-info" style="<?= $isGarage ? '' : 'display:none' ?>;background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem .75rem;font-size:12px;color:var(--amber);margin-bottom:.75rem">
+        🚗 Garáž/sklep/jiné — podíl, výměra a technický popis se neevidují.
+      </div>
+
+      <button type="submit" class="btn btn-primary">Uložit</button>
     </form>
   </div>
 </div>
+
+<script>
+function toggleDetailFields() {
+    var isByt = document.getElementById('detail-type').value === 'byt';
+    document.getElementById('detail-byt-fields').style.display = isByt ? '' : 'none';
+    document.getElementById('detail-garage-info').style.display = isByt ? 'none' : '';
+}
+</script>
 
 <!-- ══ MÍSTNOSTI ══════════════════════════════════════════════════════════ -->
 <div class="card section-card" id="mistnosti" style="border-top:4px solid var(--green)">

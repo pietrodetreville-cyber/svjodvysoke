@@ -20,32 +20,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add')
     header('Location: /admin/units.php'); exit;
 }
 
-// Upravit
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'edit') {
-    csrfCheck();
-    $type = $_POST['type'];
-    $isGarage = ($type !== 'byt');
-    if ($isGarage) {
-        $db->prepare('UPDATE units SET label=?,type=?,floor=NULL,area_m2=NULL,share_numerator=NULL,share_denominator=NULL WHERE id=?')
-           ->execute([trim($_POST['label']), $type, (int)$_POST['id']]);
-    } else {
-        if (isset($_POST['garage_unit_id'])) {
-            $db->prepare('UPDATE units SET linked_unit_id=NULL WHERE linked_unit_id=?')->execute([(int)$_POST['id']]);
-            if (!empty($_POST['garage_unit_id']))
-                $db->prepare('UPDATE units SET linked_unit_id=? WHERE id=?')->execute([(int)$_POST['id'], (int)$_POST['garage_unit_id']]);
-        }
-        $db->prepare('UPDATE units SET label=?,type=?,floor=?,area_m2=?,share_numerator=?,share_denominator=? WHERE id=?')
-           ->execute([trim($_POST['label']), $type,
-               $_POST['floor'] !== '' ? (int)$_POST['floor'] : null,
-               $_POST['area_m2'] !== '' ? (float)$_POST['area_m2'] : null,
-               $_POST['share_num'] !== '' ? (int)$_POST['share_num'] : null,
-               $_POST['share_den'] !== '' ? (int)$_POST['share_den'] : null,
-               (int)$_POST['id']]);
-    }
-    flash('Jednotka uložena.', 'success');
-    header('Location: /admin/units.php' . (isset($_POST['return_id']) ? '#row-'.$_POST['return_id'] : '')); exit;
-}
-
 // Smazat
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     csrfCheck();
@@ -263,8 +237,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     header('Location: /admin/units.php'); exit;
 }
 
-$editingId = isset($_GET['edit']) ? (int)$_GET['edit'] : null;
-
 $consUnitId = isset($_GET['cons']) ? (int)$_GET['cons'] : null;
 $consRok     = isset($_GET['cons_rok']) ? (int)$_GET['cons_rok'] : (int)date('Y');
 
@@ -305,12 +277,6 @@ include __DIR__ . '/../includes/header.php';
   .unit-card.active{border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent;box-shadow:0 2px 8px rgba(0,0,0,.1)}
   .form-row{flex-direction:column;gap:.5rem}
 }
-
-/* Inline edit desktop */
-.inline-edit-row{display:none}
-.inline-edit-row.open{display:table-row}
-tr.editing-row{background:#f0f7ff!important}
-.sticky-edit-banner{display:none;position:sticky;top:54px;z-index:20;background:#E6F1FB;border-bottom:2px solid #A8C8E8;padding:6px 16px;font-size:13px;font-weight:600;color:#185FA5}
 </style>
 
 <div class="page-hd">
@@ -387,13 +353,6 @@ tr.editing-row{background:#f0f7ff!important}
 
 <!-- ============ DESKTOP ============ -->
 <div class="units-desktop">
-  <?php if ($editingId): ?>
-  <div class="sticky-edit-banner" style="display:block" id="edit-banner">
-    ✏ Editujete: <strong><?php foreach($units as $u) if((int)$u['id']===$editingId) echo e($u['label']); ?></strong>
-    <a href="/admin/units.php" style="margin-left:1rem;font-size:12px;color:var(--muted)">✕ Zavřít</a>
-  </div>
-  <?php endif; ?>
-
   <div class="card" style="padding:0;overflow:hidden">
     <table class="tbl" style="margin:0">
       <thead><tr>
@@ -444,13 +403,12 @@ tr.editing-row{background:#f0f7ff!important}
       <?php endif; ?>
       <?php foreach ($units as $u):
         $isGarage = ($u['type'] !== 'byt');
-        $isEditing = ($editingId === (int)$u['id']);
         $linkedGarage = null;
         foreach ($units as $uu) {
             if ($uu['linked_unit_id'] == $u['id'] && $uu['type'] !== 'byt') { $linkedGarage = $uu; break; }
         }
       ?>
-      <tr id="row-<?= $u['id'] ?>" class="<?= $isEditing ? 'editing-row' : '' ?>">
+      <tr id="row-<?= $u['id'] ?>">
         <td><strong><?= e($u['label']) ?></strong></td>
         <td><?= e($u['type']) ?></td>
         <td><?= $u['floor'] !== null ? $u['floor'].'. p.' : '–' ?></td>
@@ -466,14 +424,8 @@ tr.editing-row{background:#f0f7ff!important}
           <?php else: ?><span style="color:var(--muted)">–</span><?php endif; ?>
         </td>
         <td style="white-space:nowrap">
-          <?php if ($isEditing): ?>
-            <a class="btn btn-secondary btn-sm" href="/admin/units.php">✕</a>
-          <?php else: ?>
-            <a class="btn btn-secondary btn-sm" href="?edit=<?= $u['id'] ?>">Editovat</a>
-          <?php endif; ?>
+          <a class="btn btn-secondary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>">✏ Upravit</a>
           <?php if ($u['type'] === 'byt'): ?>
-            <a class="btn btn-secondary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>"
-               title="Technický popis">🏠</a>
             <a class="btn btn-secondary btn-sm" href="?cons=<?= $u['id'] ?>&cons_rok=<?= $consRok ?>#cons-<?= $u['id'] ?>"
                style="color:var(--blue)" title="Spotřeby">📊</a>
           <?php endif; ?>
@@ -485,15 +437,6 @@ tr.editing-row{background:#f0f7ff!important}
           </form>
         </td>
       </tr>
-      <?php if ($isEditing): ?>
-      <tr class="inline-edit-row open">
-        <td colspan="9" style="padding:0">
-          <div style="background:var(--gray-lt);border-top:3px solid #A8C8E8;padding:1.25rem">
-            <?= editForm($u, $units) ?>
-          </div>
-        </td>
-      </tr>
-      <?php endif; ?>
 
       <?php if ($consUnitId === (int)$u['id'] && $u['type'] === 'byt'):
         // Načti spotřeby pro tuto jednotku
@@ -730,7 +673,12 @@ tr.editing-row{background:#f0f7ff!important}
       <?php if ($u['area_m2']): ?>m²: <?= $u['area_m2'] ?> &nbsp;<?php endif; ?>
       <?php if ($u['share_numerator']): ?>Podíl: <?= $u['share_numerator'].'/'.$u['share_denominator'] ?><?php endif; ?>
     </div>
-    <?= editForm($u, $units) ?>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a class="btn btn-primary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>">✏ Upravit</a>
+      <?php if ($u['type'] === 'byt'): ?>
+        <a class="btn btn-secondary btn-sm" href="?cons=<?= $u['id'] ?>&cons_rok=<?= $consRok ?>#cons-<?= $u['id'] ?>">📊 Spotřeby</a>
+      <?php endif; ?>
+    </div>
     <form method="POST" style="margin-top:.75rem" onsubmit="return confirm('Smazat <?= e($u['label']) ?>?')">
       <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
       <input type="hidden" name="action" value="delete">
@@ -762,70 +710,6 @@ function toggleDrawer(id) {
         setTimeout(function(){ card.scrollIntoView({behavior:'smooth', block:'start'}); }, 100);
     }
 }
-
-// Desktop scroll na editovaný řádek
-document.addEventListener('DOMContentLoaded', function() {
-    var editRow = document.querySelector('.editing-row');
-    if (editRow) {
-        setTimeout(function(){
-            var offset = editRow.getBoundingClientRect().top + window.scrollY - 100;
-            window.scrollTo({top: offset, behavior: 'smooth'});
-        }, 100);
-    }
-});
 </script>
-
-<?php
-function editForm(array $u, array $units): string {
-    $isGarage = ($u['type'] !== 'byt');
-    $linkedGarage = null;
-    foreach ($units as $uu) {
-        if ($uu['linked_unit_id'] == $u['id'] && $uu['type'] !== 'byt') { $linkedGarage = $uu; break; }
-    }
-    ob_start(); ?>
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-      <input type="hidden" name="action" value="edit">
-      <input type="hidden" name="id" value="<?= $u['id'] ?>">
-      <div class="form-row">
-        <div class="form-group"><label>Označení *</label><input type="text" name="label" required value="<?= e($u['label']) ?>"></div>
-        <div class="form-group"><label>Typ</label>
-          <select name="type">
-            <?php foreach (['byt','garáž','sklep','jiné'] as $t): ?>
-              <option value="<?= $t ?>" <?= $u['type']===$t?'selected':'' ?>><?= $t ?></option>
-            <?php endforeach; ?>
-          </select>
-        </div>
-      </div>
-      <?php if (!$isGarage): ?>
-      <div class="form-row">
-        <div class="form-group"><label>Patro</label><input type="number" name="floor" value="<?= e($u['floor'] ?? '') ?>"></div>
-        <div class="form-group"><label>m²</label><input type="number" step="0.01" name="area_m2" value="<?= e($u['area_m2'] ?? '') ?>"></div>
-      </div>
-      <div class="form-row">
-        <div class="form-group"><label>Podíl – čitatel</label><input type="number" name="share_num" value="<?= e($u['share_numerator'] ?? '') ?>"></div>
-        <div class="form-group"><label>Podíl – jmenovatel</label><input type="number" name="share_den" value="<?= e($u['share_denominator'] ?? '') ?>"></div>
-      </div>
-      <div class="form-group"><label>Přiřazená garáž</label>
-        <select name="garage_unit_id">
-          <option value="">— bez garáže —</option>
-          <?php foreach ($units as $gu): if ($gu['type']==='byt') continue; ?>
-            <option value="<?= $gu['id'] ?>" <?= ($linkedGarage && $linkedGarage['id']==$gu['id'])?'selected':'' ?>>🚗 <?= e($gu['label']) ?></option>
-          <?php endforeach; ?>
-        </select>
-      </div>
-      <?php else: ?>
-      <div style="background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem .75rem;font-size:12px;color:var(--amber);margin-bottom:.75rem">
-        🚗 Garáž — evidenční jednotka, podíl a výměra se neevidují.
-      </div>
-      <?php endif; ?>
-      <div style="display:flex;gap:8px">
-        <button type="submit" class="btn btn-primary">Uložit</button>
-        <a class="btn btn-secondary" href="/admin/units.php">Zrušit</a>
-      </div>
-    </form>
-    <?php return ob_get_clean();
-}
-?>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
