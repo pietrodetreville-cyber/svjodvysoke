@@ -192,6 +192,235 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     @unlink($tmpPath);
     header('Location: /admin/units.php'); exit;
 }
+
+// ── Import XLSX parametrů jednotek (Jednotky / Místnosti / Vybavení) ────
+function xlsxColToIndex(string $col): int {
+    $col = strtoupper($col);
+    $n = 0;
+    for ($i = 0; $i < strlen($col); $i++) $n = $n * 26 + (ord($col[$i]) - 64);
+    return $n - 1;
+}
+
+function parseXlsxWorkbook(string $path): array {
+    $zip = new ZipArchive();
+    if ($zip->open($path) !== true) throw new Exception('Nelze otevřít XLSX soubor.');
+
+    $sharedStrings = [];
+    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+    if ($ssXml) {
+        $ss = new SimpleXMLElement($ssXml);
+        foreach ($ss->si as $si) {
+            $val = '';
+            if (isset($si->t)) { $val = (string)$si->t; }
+            else { foreach ($si->r as $r) { if (isset($r->t)) $val .= (string)$r->t; } }
+            $sharedStrings[] = $val;
+        }
+    }
+
+    // Mapování názvu listu -> soubor sheetN.xml
+    $sheetFiles = [];
+    $wbXml = $zip->getFromName('xl/workbook.xml');
+    $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+    if ($wbXml && $relsXml) {
+        $wb = new SimpleXMLElement($wbXml);
+        $rels = new SimpleXMLElement($relsXml);
+        $ridToTarget = [];
+        foreach ($rels->Relationship as $rel) {
+            $ridToTarget[(string)$rel['Id']] = (string)$rel['Target'];
+        }
+        $ns = $wb->getNamespaces(true);
+        foreach ($wb->sheets->sheet as $sheet) {
+            $attrs = $sheet->attributes($ns['r'] ?? 'http://schemas.openxmlformats.org/officeDocument/2006/relationships');
+            $rid = (string)$attrs['id'];
+            $name = (string)$sheet['name'];
+            if (isset($ridToTarget[$rid])) {
+                $target = ltrim($ridToTarget[$rid], '/');
+                if (!str_starts_with($target, 'worksheets/')) $target = 'worksheets/' . basename($target);
+                $sheetFiles[$name] = 'xl/' . $target;
+            }
+        }
+    }
+
+    $sheets = [];
+    foreach ($sheetFiles as $name => $path2) {
+        $sheetXml = $zip->getFromName($path2);
+        if (!$sheetXml) continue;
+        $sheetEl = new SimpleXMLElement($sheetXml);
+        $rowsRaw = [];
+        foreach ($sheetEl->sheetData->row as $row) {
+            $arr = [];
+            $maxIdx = -1;
+            foreach ($row->c as $cell) {
+                $ref = (string)($cell['r'] ?? '');
+                preg_match('/^[A-Z]+/', $ref, $m);
+                $idx = $m ? xlsxColToIndex($m[0]) : (count($arr));
+                $t = (string)($cell['t'] ?? '');
+                $v = isset($cell->v) ? (string)$cell->v : null;
+                if ($t === 's' && $v !== null) $v = $sharedStrings[(int)$v] ?? '';
+                elseif ($v !== null && is_numeric($v)) $v = $v + 0;
+                $arr[$idx] = $v;
+                if ($idx > $maxIdx) $maxIdx = $idx;
+            }
+            for ($i = 0; $i <= $maxIdx; $i++) if (!array_key_exists($i, $arr)) $arr[$i] = null;
+            ksort($arr);
+            $rowsRaw[] = array_values($arr);
+        }
+        $sheets[$name] = $rowsRaw;
+    }
+    $zip->close();
+    return $sheets;
+}
+
+function xlsxHeaderMap(array $headerRow): array {
+    $map = [];
+    foreach ($headerRow as $i => $h) {
+        if ($h !== null && trim((string)$h) !== '') $map[trim((string)$h)] = $i;
+    }
+    return $map;
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_params') {
+    csrfCheck();
+    $file = $_FILES['params_file'] ?? null;
+    if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+        flash('Vyberte XLSX soubor.', 'error');
+        header('Location: /admin/units.php'); exit;
+    }
+
+    $tmpPath = sys_get_temp_dir() . '/params_' . uniqid() . '.xlsx';
+    move_uploaded_file($file['tmp_name'], $tmpPath);
+    $unitsUpdated = 0; $roomUnits = 0; $roomsInserted = 0; $eqUnits = 0; $eqInserted = 0; $errors = [];
+
+    try {
+        $sheets = parseXlsxWorkbook($tmpPath);
+
+        // Cache: label -> unit id (case/whitespace tolerant)
+        $labelToId = [];
+        foreach ($db->query("SELECT id, label FROM units")->fetchAll() as $u) {
+            $labelToId[trim($u['label'])] = (int)$u['id'];
+        }
+
+        // ── List Jednotky ──────────────────────────────────────────────────
+        if (isset($sheets['Jednotky']) && count($sheets['Jednotky']) > 1) {
+            $rows = $sheets['Jednotky'];
+            $h = xlsxHeaderMap($rows[0]);
+            foreach (array_slice($rows, 1) as $row) {
+                $label = trim((string)($row[$h['Označení'] ?? -1] ?? ''));
+                if ($label === '') continue;
+                if (!isset($labelToId[$label])) { $errors[] = "Jednotky: neznámé označení '$label'"; continue; }
+                $id = $labelToId[$label];
+
+                $fields = []; $params = [];
+                $map = [
+                    'Typ' => 'type',
+                    'Podlaží (NP)' => 'np',
+                    'Dispozice' => 'dispozice',
+                    'Výměra m²' => 'vymera_m2',
+                    'Poznámka k výměře' => 'vymera_pozn',
+                    'Podíl – čitatel' => 'share_numerator',
+                    'Podíl – jmenovatel' => 'share_denominator',
+                ];
+                foreach ($map as $col => $dbField) {
+                    if (!isset($h[$col])) continue;
+                    $val = $row[$h[$col]] ?? null;
+                    if ($val === null || trim((string)$val) === '') continue;
+                    $fields[] = "$dbField = ?";
+                    $params[] = is_string($val) ? trim($val) : $val;
+                }
+                if ($fields) {
+                    $params[] = $id;
+                    $db->prepare('UPDATE units SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($params);
+                }
+
+                if (isset($h['Garáž (označení)'])) {
+                    $garageLabel = trim((string)($row[$h['Garáž (označení)']] ?? ''));
+                    if ($garageLabel !== '') {
+                        if (isset($labelToId[$garageLabel])) {
+                            $db->prepare('UPDATE units SET linked_unit_id=NULL WHERE linked_unit_id=?')->execute([$id]);
+                            $db->prepare('UPDATE units SET linked_unit_id=? WHERE id=?')->execute([$id, $labelToId[$garageLabel]]);
+                        } else {
+                            $errors[] = "Jednotky: neznámá garáž '$garageLabel' u '$label'";
+                        }
+                    }
+                }
+                $unitsUpdated++;
+            }
+        }
+
+        // ── List Místnosti ───────────────────────────────────────────────
+        if (isset($sheets['Místnosti']) && count($sheets['Místnosti']) > 1) {
+            $rows = $sheets['Místnosti'];
+            $h = xlsxHeaderMap($rows[0]);
+            $byUnit = [];
+            foreach (array_slice($rows, 1) as $row) {
+                $label = trim((string)($row[$h['Označení jednotky'] ?? -1] ?? ''));
+                $nazev = trim((string)($row[$h['Název místnosti'] ?? -1] ?? ''));
+                if ($label === '' || $nazev === '') continue;
+                $byUnit[$label][] = [
+                    'nazev' => $nazev,
+                    'vymera_m2' => isset($h['Výměra m²']) && $row[$h['Výměra m²']] !== null && $row[$h['Výměra m²']] !== '' ? (float)$row[$h['Výměra m²']] : null,
+                    'poznamka' => isset($h['Poznámka']) ? trim((string)($row[$h['Poznámka']] ?? '')) ?: null : null,
+                    'order_num' => isset($h['Pořadí']) && $row[$h['Pořadí']] !== null && $row[$h['Pořadí']] !== '' ? (int)$row[$h['Pořadí']] : (count($byUnit[$label] ?? []) + 1),
+                ];
+            }
+            foreach ($byUnit as $label => $roomList) {
+                if (!isset($labelToId[$label])) { $errors[] = "Místnosti: neznámé označení '$label'"; continue; }
+                $id = $labelToId[$label];
+                $db->prepare('DELETE FROM unit_rooms WHERE unit_id=?')->execute([$id]);
+                $ins = $db->prepare('INSERT INTO unit_rooms (unit_id, nazev, vymera_m2, poznamka, order_num) VALUES (?,?,?,?,?)');
+                foreach ($roomList as $r) {
+                    $ins->execute([$id, $r['nazev'], $r['vymera_m2'], $r['poznamka'], $r['order_num']]);
+                    $roomsInserted++;
+                }
+                $roomUnits++;
+            }
+        }
+
+        // ── List Vybavení ─────────────────────────────────────────────────
+        if (isset($sheets['Vybavení']) && count($sheets['Vybavení']) > 1) {
+            $rows = $sheets['Vybavení'];
+            $h = xlsxHeaderMap($rows[0]);
+            $byUnit = [];
+            foreach (array_slice($rows, 1) as $row) {
+                $label = trim((string)($row[$h['Označení jednotky'] ?? -1] ?? ''));
+                $polozka = trim((string)($row[$h['Položka'] ?? -1] ?? ''));
+                if ($label === '' || $polozka === '') continue;
+                $byUnit[$label][] = [
+                    'polozka' => $polozka,
+                    'pocet' => isset($h['Počet']) && $row[$h['Počet']] !== null && $row[$h['Počet']] !== '' ? max(1, (int)$row[$h['Počet']]) : 1,
+                    'poznamka' => isset($h['Poznámka']) ? trim((string)($row[$h['Poznámka']] ?? '')) ?: null : null,
+                    'order_num' => isset($h['Pořadí']) && $row[$h['Pořadí']] !== null && $row[$h['Pořadí']] !== '' ? (int)$row[$h['Pořadí']] : (count($byUnit[$label] ?? []) + 1),
+                ];
+            }
+            foreach ($byUnit as $label => $eqList) {
+                if (!isset($labelToId[$label])) { $errors[] = "Vybavení: neznámé označení '$label'"; continue; }
+                $id = $labelToId[$label];
+                $db->prepare('DELETE FROM unit_equipment WHERE unit_id=?')->execute([$id]);
+                $ins = $db->prepare('INSERT INTO unit_equipment (unit_id, polozka, pocet, poznamka, order_num) VALUES (?,?,?,?,?)');
+                foreach ($eqList as $e) {
+                    $ins->execute([$id, $e['polozka'], $e['pocet'], $e['poznamka'], $e['order_num']]);
+                    $eqInserted++;
+                }
+                $eqUnits++;
+            }
+        }
+
+        if (!isset($sheets['Jednotky']) && !isset($sheets['Místnosti']) && !isset($sheets['Vybavení'])) {
+            throw new Exception('Soubor neobsahuje žádný z listů Jednotky/Místnosti/Vybavení.');
+        }
+
+        $msg = "Import dokončen: {$unitsUpdated} jednotek aktualizováno, {$roomsInserted} místností ({$roomUnits} jednotek), {$eqInserted} položek vybavení ({$eqUnits} jednotek).";
+        if ($errors) $msg .= ' Chyby (' . count($errors) . '): ' . implode('; ', array_slice($errors, 0, 5));
+        flash($msg, $errors ? 'warning' : 'success');
+
+    } catch (Exception $e) {
+        flash('Chyba importu: ' . $e->getMessage(), 'error');
+    }
+
+    @unlink($tmpPath);
+    header('Location: /admin/units.php'); exit;
+}
+
 // ── Uložit spotřebu ručně ─────────────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_consumption') {
     csrfCheck();
@@ -281,6 +510,7 @@ include __DIR__ . '/../includes/header.php';
   <h1>Jednotky domu</h1>
   <div style="display:flex;gap:8px">
     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-panel').style.display=document.getElementById('import-panel').style.display==='none'?'block':'none'">⬆ Import CSV</button>
+    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('params-import-panel').style.display=document.getElementById('params-import-panel').style.display==='none'?'block':'none'">⬆ Import parametrů</button>
     <a class="btn btn-primary" href="?add=1">+ Přidat</a>
   </div>
 </div>
@@ -342,6 +572,34 @@ include __DIR__ . '/../includes/header.php';
     </form>
     <span style="font-size:12px;color:var(--muted)">Smaže celou tabulku všech let — nelze vrátit</span>
   </div>
+</div>
+</div>
+
+<!-- IMPORT PARAMETRŮ JEDNOTEK -->
+<div id="params-import-panel" style="display:none;margin-bottom:1rem">
+<div class="card" style="border-top:3px solid var(--green);max-width:720px">
+
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:.75rem">📥 Import parametrů jednotek — XLSX</div>
+
+  <p style="font-size:13px;color:var(--muted);margin-bottom:.75rem">
+    Soubor může mít až tři listy, každý volitelný:
+  </p>
+  <ul style="font-size:12px;color:var(--muted);margin:0 0 1rem 1.2rem;line-height:1.7">
+    <li><strong>Jednotky</strong> — sloupce: Označení*, Typ, Podlaží (NP), Dispozice, Výměra m², Poznámka k výměře, Podíl – čitatel, Podíl – jmenovatel, Garáž (označení). Aktualizuje existující jednotky podle Označení, nové nezakládá.</li>
+    <li><strong>Místnosti</strong> — sloupce: Označení jednotky*, Název místnosti*, Výměra m², Poznámka, Pořadí. <strong style="color:var(--amber)">Nahradí</strong> všechny stávající místnosti u dotčených jednotek.</li>
+    <li><strong>Vybavení</strong> — sloupce: Označení jednotky*, Položka*, Počet, Poznámka, Pořadí. <strong style="color:var(--amber)">Nahradí</strong> všechno stávající vybavení u dotčených jednotek.</li>
+  </ul>
+  <p style="font-size:12px;color:var(--muted);margin-bottom:1rem">* povinný sloupec pro daný list</p>
+
+  <form method="POST" enctype="multipart/form-data" style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+    <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+    <input type="hidden" name="action" value="import_params">
+    <div class="form-group" style="margin:0;flex:1;min-width:240px">
+      <label>XLSX soubor *</label>
+      <input type="file" name="params_file" accept=".xlsx" required>
+    </div>
+    <button type="submit" class="btn btn-primary">⬆ Importovat</button>
+  </form>
 </div>
 </div>
 
