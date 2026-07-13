@@ -1,6 +1,6 @@
 <?php
 require_once __DIR__ . '/../includes/functions.php';
-$user = requireAdmin();
+$user = requireSuperAdmin();
 $pageTitle = 'SQL konzole';
 
 $results = [];
