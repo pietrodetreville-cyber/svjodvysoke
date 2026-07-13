@@ -37,19 +37,25 @@
 4. Vložte obsah souboru `install.sql` a klikněte **Spustit**
 
 ### 2. Konfigurace
-Otevřete `config.php` a vyplňte:
-```php
-define('DB_NAME', 'nazev_vasi_databaze');
-define('DB_USER', 'uzivatel_databaze');
-define('DB_PASS', 'heslo_databaze');
-define('SITE_URL', 'https://odvysoke.drymtym.cz');
-define('SECRET_KEY', 'vygenerujte-nahodny-retezec-32-znaku');
+`config.php` čte tajné hodnoty z `.env` (negituje se, viz `.env.example`
+pro šablonu). Zkopírujte `.env.example` na `.env` a vyplňte:
+```
+DB_HOST=...
+DB_NAME=nazev_vasi_databaze
+DB_USER=uzivatel_databaze
+DB_PASS=heslo_databaze
+SECRET_KEY=vygenerujte-nahodny-retezec-32-znaku
+SITE_URL=https://odvysoke.drymtym.cz
+SITE_NAME=SVJ Od Vysoké – Rozhled
+GMAIL_USER=...
+GMAIL_PASS=...
 ```
 
 ### 3. Nahrání na server
 Nahrajte celý obsah složky přes **FTP** (FileZilla apod.) nebo přes
 Webglobe správce souborů do kořenové složky subdomény
-`odvysoke.drymtym.cz`.
+`odvysoke.drymtym.cz`. **`.env` se negituje, takže ho musíte nahrát
+zvlášť ručně** — s produkčními hodnotami, ne s těmi lokálními.
 
 ### 4. Subdoména na Webglobu
 V administraci Webglobu: **Domény → Subdomény → Přidat subdoménu**
