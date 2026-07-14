@@ -484,33 +484,8 @@ $units = $db->query(
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<style>
-/* === DESKTOP === */
-.units-desktop{display:block}
-.units-mobile{display:none}
-
-/* === MOBILE === */
-@media(max-width:700px){
-  .units-desktop{display:none}
-  .units-mobile{display:block}
-  .unit-card{background:#fff;border:1px solid var(--border);border-radius:var(--radius);padding:.75rem 1rem;margin-bottom:.5rem;cursor:pointer;transition:box-shadow .15s;display:flex;align-items:center;justify-content:space-between}
-  .unit-card:active{box-shadow:0 2px 8px rgba(0,0,0,.15)}
-  .unit-card.is-garage{border-left:3px solid var(--amber)}
-  .unit-card-label{font-weight:700;font-size:15px}
-  .unit-card-sub{font-size:12px;color:var(--muted);margin-top:2px}
-  .unit-card-right{font-size:11px;color:var(--muted);text-align:right}
-  .unit-drawer{display:none;background:var(--gray-lt);border:1px solid #A8C8E8;border-top:3px solid #A8C8E8;border-radius:0 0 var(--radius) var(--radius);padding:1rem;margin-top:-6px;margin-bottom:.5rem}
-  .unit-drawer.open{display:block}
-  .unit-card.active{border-radius:var(--radius) var(--radius) 0 0;border-bottom-color:transparent;box-shadow:0 2px 8px rgba(0,0,0,.1)}
-  .form-row{flex-direction:column;gap:.5rem}
-}
-</style>
-
-<div class="page-hd">
-  <h1>Jednotky domu</h1>
+<div class="page-hd" style="justify-content:flex-end">
   <div style="display:flex;gap:8px">
-    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-panel').style.display=document.getElementById('import-panel').style.display==='none'?'block':'none'">⬆ Import CSV</button>
-    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('params-import-panel').style.display=document.getElementById('params-import-panel').style.display==='none'?'block':'none'">⬆ Import parametrů</button>
     <a class="btn btn-primary" href="?add=1">+ Přidat</a>
   </div>
 </div>
@@ -603,14 +578,10 @@ include __DIR__ . '/../includes/header.php';
 </div>
 </div>
 
-<?php if (isset($_GET['add'])): ?>
-<!-- Desktop: přidávací řádek nahoře v tabulce -->
-<?php endif; ?>
-
-<!-- ============ DESKTOP ============ -->
-<div class="units-desktop">
-  <div class="card" style="padding:0;overflow:hidden">
-    <table class="tbl" style="margin:0">
+<div class="card" style="border-top:4px solid var(--green)">
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">📋 Seznam jednotek (<?= count($units) ?>)</div>
+  <div class="tbl-wrap">
+    <table class="tbl">
       <thead><tr>
         <th>Jednotka</th><th>Typ</th><th>Patro</th><th>m²</th>
         <th>Podíl</th><th>% váha</th><th>Vlastník</th><th>Garáž</th><th></th>
@@ -676,7 +647,7 @@ include __DIR__ . '/../includes/header.php';
           <?php else: ?><span style="color:var(--muted)">–</span><?php endif; ?>
         </td>
         <td style="white-space:nowrap">
-          <a class="btn btn-secondary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>">✏ Upravit</a>
+          <a class="btn btn-secondary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>">Detail</a>
           <?php if ($u['type'] === 'byt'): ?>
             <a class="btn btn-secondary btn-sm" href="?cons=<?= $u['id'] ?>&cons_rok=<?= $consRok ?>#cons-<?= $u['id'] ?>"
                style="color:var(--blue)" title="Spotřeby">📊</a>
@@ -851,112 +822,12 @@ include __DIR__ . '/../includes/header.php';
   </div>
 </div>
 
-<!-- ============ MOBIL ============ -->
-<div class="units-mobile">
-  <?php if (isset($_GET['add'])): ?>
-  <div class="unit-card" style="border-top:3px solid #A8CC88;background:#EAF3DE;cursor:default">
-    <div style="width:100%">
-      <div class="unit-card-label" style="color:var(--green)">+ Nová jednotka</div>
-    </div>
-  </div>
-  <div class="unit-drawer open" style="border-top-color:#A8CC88">
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-      <input type="hidden" name="action" value="add">
-      <div class="form-row">
-        <div class="form-group"><label>Označení *</label><input type="text" name="label" required placeholder="271/1" autofocus></div>
-        <div class="form-group"><label>Typ</label>
-          <select name="type" onchange="
-            var byt = this.value === 'byt';
-            this.closest('form').querySelector('.mob-byt-fields').style.display = byt ? '' : 'none';
-            this.closest('form').querySelector('.mob-garage-info').style.display = byt ? 'none' : 'block';
-          ">
-            <option value="byt">byt</option>
-            <option value="garáž">garáž</option>
-            <option value="sklep">sklep</option>
-            <option value="jiné">jiné</option>
-          </select>
-        </div>
-      </div>
-      <div class="mob-byt-fields">
-        <div class="form-row">
-          <div class="form-group"><label>Podíl – čitatel</label><input type="number" name="share_num"></div>
-          <div class="form-group"><label>Podíl – jmenovatel</label><input type="number" name="share_den"></div>
-        </div>
-      </div>
-      <div class="mob-garage-info" style="display:none;background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem .75rem;font-size:12px;color:var(--amber);margin-bottom:.75rem">
-        🚗 Garáž — evidenční jednotka.
-      </div>
-      <div style="display:flex;gap:8px">
-        <button type="submit" class="btn btn-primary">Přidat</button>
-        <a class="btn btn-secondary" href="/admin/units.php">Zrušit</a>
-      </div>
-    </form>
-  </div>
-  <?php endif; ?>
-  <?php foreach ($units as $u):
-    $isGarage = ($u['type'] !== 'byt');
-    $linkedGarage = null;
-    foreach ($units as $uu) {
-        if ($uu['linked_unit_id'] == $u['id'] && $uu['type'] !== 'byt') { $linkedGarage = $uu; break; }
-    }
-  ?>
-  <div class="unit-card <?= $isGarage ? 'is-garage' : '' ?>" id="card-<?= $u['id'] ?>" onclick="toggleDrawer(<?= $u['id'] ?>)">
-    <div>
-      <div class="unit-card-label"><?= e($u['label']) ?></div>
-      <div class="unit-card-sub">
-        <?= e($u['type']) ?>
-        <?php if (!$isGarage && $linkedGarage): ?> &nbsp;🚗 <?= e($linkedGarage['label']) ?><?php endif; ?>
-        <?php if (!$isGarage && $u['owner_name']): ?> &nbsp;· <?= e($u['owner_name']) ?><?php endif; ?>
-      </div>
-    </div>
-    <div class="unit-card-right">
-      <?= $u['share_pct'] !== null ? $u['share_pct'].' %' : '' ?>
-      <div style="font-size:18px;color:var(--muted)">›</div>
-    </div>
-  </div>
-  <div class="unit-drawer" id="drawer-<?= $u['id'] ?>">
-    <div style="font-size:12px;color:var(--muted);margin-bottom:.75rem">
-      <?php if ($u['np'] !== null): ?>Podlaží: <?= $u['np'] ?>. NP &nbsp;<?php endif; ?>
-      <?php if ($u['vymera_m2']): ?>m²: <?= $u['vymera_m2'] ?> &nbsp;<?php endif; ?>
-      <?php if ($u['share_numerator']): ?>Podíl: <?= $u['share_numerator'].'/'.$u['share_denominator'] ?><?php endif; ?>
-    </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a class="btn btn-primary btn-sm" href="/admin/unit_detail.php?id=<?= $u['id'] ?>">✏ Upravit</a>
-      <?php if ($u['type'] === 'byt'): ?>
-        <a class="btn btn-secondary btn-sm" href="?cons=<?= $u['id'] ?>&cons_rok=<?= $consRok ?>#cons-<?= $u['id'] ?>">📊 Spotřeby</a>
-      <?php endif; ?>
-    </div>
-    <form method="POST" style="margin-top:.75rem" onsubmit="return confirm('Smazat <?= e($u['label']) ?>?')">
-      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-      <input type="hidden" name="action" value="delete">
-      <input type="hidden" name="id" value="<?= $u['id'] ?>">
-      <button type="submit" class="btn btn-danger btn-sm">🗑 Smazat jednotku</button>
-    </form>
-  </div>
-  <?php endforeach; ?>
-</div>
-
 <script>
 function toggleAddFields() {
     var type = document.getElementById('add-type').value;
     var isByt = type === 'byt';
     document.getElementById('add-byt-fields').style.display = isByt ? '' : 'none';
     document.getElementById('add-garage-info').style.display = isByt ? 'none' : 'block';
-}
-
-function toggleDrawer(id) {
-    var card = document.getElementById('card-' + id);
-    var drawer = document.getElementById('drawer-' + id);
-    var isOpen = drawer.classList.contains('open');
-    // Zavři ostatní
-    document.querySelectorAll('.unit-drawer.open').forEach(function(d){ d.classList.remove('open'); });
-    document.querySelectorAll('.unit-card.active').forEach(function(c){ c.classList.remove('active'); });
-    if (!isOpen) {
-        drawer.classList.add('open');
-        card.classList.add('active');
-        setTimeout(function(){ card.scrollIntoView({behavior:'smooth', block:'start'}); }, 100);
-    }
 }
 </script>
 

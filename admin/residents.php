@@ -33,21 +33,13 @@ foreach ($owners as $r) $all[$r['unit_label']]['vlastnik'] = $r;
 foreach ($tenants as $r) $all[$r['unit_label']]['najemnik'][] = $r;
 ksort($all);
 
-// Statistiky
 $totalOwners  = count($owners);
 $totalTenants = count($tenants);
-$totalPersons = array_sum(array_column($owners, 'persons_count'))
-              + array_sum(array_column($tenants, 'persons_count'));
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="page-hd">
-  <h1>Obyvatelé</h1>
-  <div style="display:flex;gap:8px">
-    <a class="btn btn-secondary btn-sm" href="/admin/residents.php?export=csv">⬇ Export CSV</a>
-  </div>
-</div>
+<p style="font-size:13px;color:var(--muted);margin:0 0 1rem">Přehled obyvatel jednotek — vlastníci s trvalým pobytem a všichni nájemníci.</p>
 
 <?php
 // Export CSV
@@ -72,28 +64,9 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
 }
 ?>
 
-<!-- Statistiky -->
-<div class="metrics" style="margin-bottom:1.25rem">
-  <div class="metric">
-    <div class="metric-num"><?= count($all) ?></div>
-    <div class="metric-lbl">Obsazených bytů</div>
-  </div>
-  <div class="metric">
-    <div class="metric-num" style="color:var(--blue)"><?= $totalOwners ?></div>
-    <div class="metric-lbl">Vlastníků (trvalý pobyt)</div>
-  </div>
-  <div class="metric">
-    <div class="metric-num" style="color:var(--green)"><?= $totalTenants ?></div>
-    <div class="metric-lbl">Nájemníků</div>
-  </div>
-  <div class="metric">
-    <div class="metric-num"><?= $totalPersons ?: '–' ?></div>
-    <div class="metric-lbl">Osob celkem</div>
-  </div>
-</div>
-
 <!-- Přehled -->
-<div class="card">
+<div class="card" style="border-top:4px solid var(--green)">
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">📋 Seznam obyvatel (<?= count($all) ?>)</div>
   <div class="tbl-wrap">
   <table class="tbl">
     <thead>
@@ -175,10 +148,7 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     </tbody>
   </table>
   </div>
-  <div style="font-size:12px;color:var(--muted);margin-top:8px">
-    <?= $totalOwners + $totalTenants ?> záznamů &nbsp;·&nbsp;
-    Zobrazeni vlastníci s trvalým pobytem a všichni nájemníci
-  </div>
+  <div style="font-size:12px;color:var(--muted);margin-top:8px"><?= $totalOwners + $totalTenants ?> záznamů</div>
 </div>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>

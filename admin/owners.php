@@ -12,29 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     header('Location: /admin/owners.php'); exit;
 }
 
-// Filtr
-$filter = $_GET['filter'] ?? 'vše';
-$search = trim($_GET['q'] ?? '');
-$sort   = $_GET['sort'] ?? 'unit';
-$where  = '1=1';
-$params = [];
-
-if (in_array($filter, ['úplná','neúplná','chybí'])) {
-    $where .= ' AND o.status=?'; $params[] = $filter;
-}
-if ($search) {
-    $where .= ' AND (o.full_name LIKE ? OR u.label LIKE ?)';
-    $params[] = "%$search%"; $params[] = "%$search%";
-}
-
-$orderBy = match($sort) {
-    'updated_desc' => 'o.updated_at DESC',
-    'updated_asc'  => 'o.updated_at ASC',
-    'name'         => 'o.full_name ASC',
-    default        => 'CAST(SUBSTRING_INDEX(u.label, "/", 1) AS UNSIGNED) ASC, CAST(SUBSTRING_INDEX(u.label, "/", -1) AS UNSIGNED) ASC',
-};
-
-$stmt = $db->prepare(
+$stmt = $db->query(
     "SELECT o.*, u.label AS unit_label, u.type AS unit_type,
             u.share_numerator, u.share_denominator,
             CASE WHEN u.share_numerator IS NOT NULL AND u.share_denominator > 0
@@ -49,91 +27,24 @@ $stmt = $db->prepare(
          GROUP BY linked_unit_id
      ) g ON g.linked_unit_id=u.id
      LEFT JOIN units lb ON lb.id=u.linked_unit_id AND u.type != 'byt'
-     WHERE $where ORDER BY $orderBy"
+     ORDER BY CAST(SUBSTRING_INDEX(u.label, '/', 1) AS UNSIGNED) ASC, CAST(SUBSTRING_INDEX(u.label, '/', -1) AS UNSIGNED) ASC"
 );
-$stmt->execute($params);
 $rows = $stmt->fetchAll();
-
-// Statistiky
-$stats = $db->query(
-    "SELECT
-        SUM(CASE WHEN status='úplná' THEN 1 ELSE 0 END) as uplna,
-        SUM(CASE WHEN status='neúplná' THEN 1 ELSE 0 END) as neuplna,
-        SUM(CASE WHEN status='chybí' THEN 1 ELSE 0 END) as chybi,
-        COUNT(*) as celkem
-     FROM owners"
-)->fetch();
-
-// Poslední aktualizace
-$lastUpdated = $db->query(
-    "SELECT o.full_name, o.updated_at, u.label
-     FROM owners o JOIN units u ON o.unit_id=u.id
-     LEFT JOIN users us ON us.unit_id=o.unit_id AND us.role='owner'
-     LEFT JOIN (
-         SELECT linked_unit_id, GROUP_CONCAT(label ORDER BY label SEPARATOR ', ') AS garaze
-         FROM units WHERE type != 'byt' AND linked_unit_id IS NOT NULL
-         GROUP BY linked_unit_id
-     ) g ON g.linked_unit_id=u.id
-     LEFT JOIN units lb ON lb.id=u.linked_unit_id AND u.type != 'byt'
-     WHERE o.updated_at IS NOT NULL
-     ORDER BY o.updated_at DESC LIMIT 1"
-)->fetch();
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="page-hd">
-  <h1>Kartotéka vlastníků</h1>
+<div class="page-hd" style="justify-content:flex-end">
   <div style="display:flex;gap:8px">
-    <a class="btn btn-secondary btn-sm" href="/admin/export.php?format=csv">⬇ Export CSV</a>
-    <a class="btn btn-secondary btn-sm" href="/admin/export_prezence.php">📋 Prezenční listina</a>
     <a class="btn btn-primary" href="/admin/owner_edit.php">+ Přidat</a>
   </div>
 </div>
 
-<!-- Statistiky -->
-<div class="metrics" style="margin-bottom:1rem">
-  <div class="metric"><div class="metric-num"><?= $stats['celkem'] ?></div><div class="metric-lbl">Celkem karet</div></div>
-  <div class="metric"><div class="metric-num" style="color:var(--green)"><?= $stats['uplna'] ?></div><div class="metric-lbl">Úplných</div></div>
-  <div class="metric"><div class="metric-num" style="color:var(--amber)"><?= $stats['neuplna'] ?></div><div class="metric-lbl">Neúplných</div></div>
-  <div class="metric"><div class="metric-num" style="color:var(--red)"><?= $stats['chybi'] ?></div><div class="metric-lbl">Chybí</div></div>
-  <?php if ($lastUpdated): ?>
-  <div class="metric" style="background:var(--blue-lt)">
-    <div style="font-size:12px;font-weight:600;color:var(--blue)"><?= e($lastUpdated['label']) ?></div>
-    <div style="font-size:11px;color:var(--blue);margin-top:2px"><?= e(mb_substr($lastUpdated['full_name'],0,16)) ?></div>
-    <div class="metric-lbl" style="color:var(--blue)">Naposledy vyplnil <?= date('j. n. H:i', strtotime($lastUpdated['updated_at'])) ?></div>
-  </div>
-  <?php endif; ?>
-</div>
-
-<!-- Filtr -->
-<div class="card" style="margin-bottom:1rem">
-  <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <input type="text" name="q" placeholder="Hledat jméno nebo jednotku…" value="<?= e($search) ?>"
-           style="flex:1;min-width:160px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:14px">
-    <?php foreach (['vše','úplná','neúplná','chybí'] as $f): ?>
-      <a href="?filter=<?= $f ?>&q=<?= urlencode($search) ?>&sort=<?= $sort ?>"
-         style="padding:5px 12px;border-radius:99px;font-size:13px;font-weight:500;border:1px solid var(--border);text-decoration:none;
-                background:<?= $filter===$f ? 'var(--blue)' : '#fff' ?>;
-                color:<?= $filter===$f ? '#fff' : 'var(--muted)' ?>">
-        <?= ucfirst($f) ?>
-      </a>
-    <?php endforeach; ?>
-    <select name="sort" onchange="this.form.submit()" style="font-size:13px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm)">
-      <option value="unit"         <?= $sort==='unit'         ? 'selected' : '' ?>>Řadit: Jednotka</option>
-      <option value="name"         <?= $sort==='name'         ? 'selected' : '' ?>>Řadit: Jméno</option>
-      <option value="updated_desc" <?= $sort==='updated_desc' ? 'selected' : '' ?>>Řadit: Naposledy upravené</option>
-      <option value="updated_asc"  <?= $sort==='updated_asc'  ? 'selected' : '' ?>>Řadit: Nejdéle neupravené</option>
-    </select>
-    <input type="hidden" name="filter" value="<?= e($filter) ?>">
-    <button type="submit" class="btn btn-secondary btn-sm">Hledat</button>
-  </form>
-</div>
-
 <!-- Tabulka -->
-<div class="card">
+<div class="card" style="border-top:4px solid var(--green)">
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">📋 Seznam vlastníků (<?= count($rows) ?>)</div>
   <?php if (!$rows): ?>
-    <p style="color:var(--muted);font-size:14px">Žádné záznamy neodpovídají filtru.</p>
+    <p style="color:var(--muted);font-size:14px">Zatím žádní vlastníci.</p>
   <?php else: ?>
   <div class="tbl-wrap">
   <table class="tbl">
@@ -232,7 +143,7 @@ include __DIR__ . '/../includes/header.php';
     </tbody>
   </table>
   </div>
-  <div style="font-size:12px;color:var(--muted);margin-top:8px"><?= count($rows) ?> záznamů &nbsp;·&nbsp; <a href="/admin/export.php?format=csv">⬇ Export CSV</a></div>
+  <div style="font-size:12px;color:var(--muted);margin-top:8px"><?= count($rows) ?> záznamů</div>
   <?php endif; ?>
 </div>
 

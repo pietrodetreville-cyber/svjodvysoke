@@ -79,22 +79,17 @@ $tenants = $db->query(
 
 $units = $db->query("SELECT id, label, type FROM units WHERE type='byt' ORDER BY label")->fetchAll();
 
-// Statistiky
-$total    = count($tenants);
-$active   = array_filter($tenants, fn($t) => !$t['rent_until'] || strtotime($t['rent_until']) >= time());
-$expiring = array_filter($tenants, fn($t) => $t['rent_until'] && strtotime($t['rent_until']) < strtotime('+30 days') && strtotime($t['rent_until']) >= time());
+$total = count($tenants);
 
 include __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="page-hd"><h1>Uživatelé jednotky</h1></div>
-<p style="font-size:13px;color:var(--muted);margin:-.75rem 0 1.25rem">Nájemníci a osoby s věcným břemenem — jednotka nemusí být ve vlastním užívání vlastníka.</p>
+<p style="font-size:13px;color:var(--muted);margin:0 0 1rem">Nájemníci a osoby s věcným břemenem — jednotka nemusí být ve vlastním užívání vlastníka.</p>
 
-<!-- Statistiky -->
-<div class="metrics" style="margin-bottom:1.25rem">
-  <div class="metric"><div class="metric-num"><?= $total ?></div><div class="metric-lbl">Celkem</div></div>
-  <div class="metric"><div class="metric-num" style="color:var(--green)"><?= count($active) ?></div><div class="metric-lbl">Aktivních</div></div>
-  <div class="metric"><div class="metric-num" style="color:var(--amber)"><?= count($expiring) ?></div><div class="metric-lbl">Končí do 30 dní</div></div>
+<div class="page-hd" style="justify-content:flex-end">
+  <div style="display:flex;gap:8px">
+    <button type="button" class="btn btn-primary" onclick="toggleTenantForm()">+ Přidat</button>
+  </div>
 </div>
 
 <!-- Formulář -->
@@ -102,7 +97,8 @@ include __DIR__ . '/../includes/header.php';
 .form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
 @media(max-width:700px){.form-row-3{grid-template-columns:1fr}}
 </style>
-<div class="card" style="margin-bottom:1.5rem;border-top:4px solid var(--blue)">
+<div id="tenant-form-panel" style="display:<?= $editing ? 'block' : 'none' ?>;margin-bottom:1.5rem">
+<div class="card" style="border-top:4px solid var(--blue)">
   <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:1rem">👤 <?= $editing ? 'Upravit uživatele' : 'Přidat uživatele' ?></div>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
@@ -172,9 +168,14 @@ include __DIR__ . '/../includes/header.php';
 
     <div style="display:flex;gap:8px">
       <button type="submit" class="btn btn-primary">Uložit</button>
-      <?php if ($editing): ?><a class="btn btn-secondary" href="/admin/tenants.php">Zrušit</a><?php endif; ?>
+      <?php if ($editing): ?>
+        <a class="btn btn-secondary" href="/admin/tenants.php">Zrušit</a>
+      <?php else: ?>
+        <button type="button" class="btn btn-secondary" onclick="toggleTenantForm()">Zrušit</button>
+      <?php endif; ?>
     </div>
   </form>
+</div>
 </div>
 
 <!-- Seznam -->
@@ -253,5 +254,12 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <?php endif; ?>
 </div>
+
+<script>
+function toggleTenantForm() {
+    var panel = document.getElementById('tenant-form-panel');
+    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+</script>
 
 <?php include __DIR__ . '/../includes/footer.php'; ?>
