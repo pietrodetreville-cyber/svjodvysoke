@@ -98,8 +98,8 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Formulář -->
-<div class="card" style="max-width:680px;margin-bottom:1.5rem">
-  <div class="card-title"><?= $editing ? 'Upravit uživatele' : 'Přidat uživatele' ?></div>
+<div class="card" style="max-width:680px;margin-bottom:1.5rem;border-top:4px solid var(--blue)">
+  <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:1rem">👤 <?= $editing ? 'Upravit uživatele' : 'Přidat uživatele' ?></div>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <input type="hidden" name="action" value="<?= $editing ? 'edit' : 'add' ?>">
@@ -132,7 +132,10 @@ include __DIR__ . '/../includes/header.php';
         <label>Jméno a příjmení *</label>
         <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? '') ?>">
       </div>
-      <div class="form-group"></div>
+      <div class="form-group">
+        <label>Počet osob</label>
+        <input type="number" name="persons_count" min="1" max="20" value="<?= e($editing['persons_count'] ?? '') ?>">
+      </div>
     </div>
 
     <div class="form-row">
@@ -162,15 +165,9 @@ include __DIR__ . '/../includes/header.php';
       </div>
     </div>
 
-    <div class="form-row">
-      <div class="form-group">
-        <label>Počet osob</label>
-        <input type="number" name="persons_count" min="1" max="20" value="<?= e($editing['persons_count'] ?? '') ?>">
-      </div>
-      <div class="form-group">
-        <label>Poznámka</label>
-        <input type="text" name="note" value="<?= e($editing['note'] ?? '') ?>">
-      </div>
+    <div class="form-group">
+      <label>Poznámka</label>
+      <input type="text" name="note" value="<?= e($editing['note'] ?? '') ?>">
     </div>
 
     <div style="display:flex;gap:8px">
@@ -181,8 +178,8 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Seznam -->
-<div class="card">
-  <div class="card-title">Seznam uživatelů (<?= $total ?>)</div>
+<div class="card" style="border-top:4px solid var(--green)">
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">📋 Seznam uživatelů (<?= $total ?>)</div>
   <?php if (!$tenants): ?>
     <p style="color:var(--muted);font-size:14px">Zatím žádní uživatelé.</p>
   <?php else: ?>
