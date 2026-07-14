@@ -159,7 +159,8 @@ $o = $owner ?? [];
 
 <div class="owner-edit-grid">
 
-<div class="card">
+<div class="card" style="border-top:4px solid var(--blue)">
+  <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:1rem">👤 Základní údaje</div>
 <form method="POST">
   <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
   <input type="hidden" name="action" value="save_owner">
