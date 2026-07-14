@@ -14,6 +14,7 @@ if ($id) {
 $pageTitle = $owner ? 'Upravit kartu' : 'Přidat vlastníka';
 
 $units = $db->query('SELECT * FROM units ORDER BY label')->fetchAll();
+$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'save_owner') === 'save_owner') {
     csrfCheck();
@@ -41,6 +42,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? 'save_owner') 
     if ($owner && ($owner['updated_by_role'] ?? '') === 'owner' && $user['role'] === 'admin') {
         flash('Tuto kartu vyplnil vlastník — nemáte oprávnění ji měnit. Kontaktujte superadmina.', 'error');
         header('Location: /admin/owners.php'); exit;
+    }
+
+    // Blok: nelze přepnout na jednoduché/neuvedeno vlastnictví, dokud existují další vlastníci
+    if ($owner && !in_array($data['ownership_form'], ['podílové', 'společné jmění manželů'])) {
+        $pc = $db->prepare('SELECT COUNT(*) FROM owner_persons WHERE owner_id=?');
+        $pc->execute([$owner['id']]);
+        if ($pc->fetchColumn() > 0) {
+            flash('Nelze přepnout na "' . $ownershipLabels[$data['ownership_form']] . '" — u jednotky jsou stále evidováni další vlastníci. Nejdřív je smažte v sekci Další vlastníci.', 'error');
+            header('Location: /admin/owner_edit.php?id=' . $owner['id'] . '#dalsi-vlastnici'); exit;
+        }
     }
 
     if ($owner) {
@@ -141,7 +152,12 @@ if ($owner) {
 }
 $usageTypLabels = ['najem' => 'Nájem', 'vecne_bremeno' => 'Věcné břemeno'];
 
-$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
+// Součet podílů na jednotce (hlavní vlastník + další vlastníci) — má být 100 %
+$sharePctSum = null;
+if ($owner && in_array($owner['ownership_form'] ?? 'neuvedeno', ['podílové', 'společné jmění manželů'])) {
+    $sharePctSum = (float)($owner['unit_share_pct'] ?? 0);
+    foreach ($ownerPersons as $pp) $sharePctSum += (float)($pp['unit_share_pct'] ?? 0);
+}
 
 include __DIR__ . '/../includes/header.php';
 $o = $owner ?? [];
@@ -306,6 +322,12 @@ $o = $owner ?? [];
   <p style="font-size:12px;color:var(--muted);margin-bottom:1rem">
     Použijte u SJM (manžel/ka) nebo podílového vlastnictví (další spoluvlastníci). Hlavní vlastník zůstává ve formuláři výše.
   </p>
+
+  <?php if ($sharePctSum !== null): ?>
+  <div style="font-size:13px;font-weight:600;margin-bottom:1rem;padding:.5rem .75rem;border-radius:var(--radius-sm);<?= abs($sharePctSum - 100) < 0.01 ? 'background:var(--green-lt);color:var(--green)' : 'background:var(--red-lt);color:var(--red)' ?>">
+    <?= abs($sharePctSum - 100) < 0.01 ? '✓' : '⚠' ?> Součet podílů: <?= number_format($sharePctSum, 2, ',', ' ') ?> % <?= abs($sharePctSum - 100) < 0.01 ? '' : '(mělo by být 100 %)' ?>
+  </div>
+  <?php endif; ?>
 
   <?php if ($ownerPersons): ?>
   <table class="tbl tbl-edit" style="margin-bottom:1rem">

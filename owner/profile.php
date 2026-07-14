@@ -17,6 +17,7 @@ if ($user['unit_id']) {
     $s4->execute([$user['unit_id']]); $tenant = $s4->fetch();
 }
 $o = $owner ?? []; $t = $tenant ?? [];
+$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
 
 // ── Technický popis jednotky ──────────────────────────────────────────────
 $unit_rooms_data = [];
@@ -98,8 +99,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     ];
     $data['status'] = ownerStatus($data);
     if (!in_array($data['ownership_form'], ['podílové', 'společné jmění manželů'])) $data['unit_share_pct'] = null;
+
+    $blockedPersonsCount = 0;
+    if ($owner && !in_array($data['ownership_form'], ['podílové', 'společné jmění manželů'])) {
+        $pc = $db->prepare('SELECT COUNT(*) FROM owner_persons WHERE owner_id=?');
+        $pc->execute([$owner['id']]);
+        $blockedPersonsCount = (int)$pc->fetchColumn();
+    }
+
     if (!$data['full_name']) flash('Vyplňte jméno a příjmení.', 'error');
     elseif (!$data['gdpr_consent']) flash('Pro uložení je nutný souhlas se zpracováním osobních údajů.', 'error');
+    elseif ($blockedPersonsCount > 0) flash('Nelze přepnout na "' . $ownershipLabels[$data['ownership_form']] . '" — máte stále evidované další vlastníky. Nejdřív je smažte níže.', 'error');
     else {
         if ($owner) {
             $db->prepare('UPDATE owners SET full_name=?,residence=?,ownership_form=?,unit_share_pct=?,persons_count=?,email=?,email_verified=?,notify_email=?,phone=?,whatsapp=?,address=?,note=?,gdpr_consent=?,status=?,updated_by_role=? WHERE id=?')
@@ -179,7 +189,13 @@ if ($owner) {
     $stmt->execute([$owner['id']]);
     $ownerPersons = $stmt->fetchAll();
 }
-$ownershipLabels = ['bezpodílové' => 'Jednoduché (jeden vlastník)', 'společné jmění manželů' => 'SJM (manželé)', 'podílové' => 'Podílové (více vlastníků)', 'neuvedeno' => 'Neuvedeno'];
+
+// Součet podílů na jednotce (hlavní vlastník + další vlastníci) — má být 100 %
+$sharePctSum = null;
+if ($owner && in_array($owner['ownership_form'] ?? 'neuvedeno', ['podílové', 'společné jmění manželů'])) {
+    $sharePctSum = (float)($owner['unit_share_pct'] ?? 0);
+    foreach ($ownerPersons as $pp) $sharePctSum += (float)($pp['unit_share_pct'] ?? 0);
+}
 
 include __DIR__ . '/../includes/header.php';
 ?>
@@ -306,6 +322,11 @@ include __DIR__ . '/../includes/header.php';
       <!-- Další vlastníci (SJM / podílové) -->
       <div style="border-top:1px solid var(--border);margin-top:1.25rem;padding-top:1rem">
         <div style="font-size:13px;font-weight:600;color:var(--blue);margin-bottom:.5rem">👥 Další vlastníci (SJM / podílové)</div>
+        <?php if ($sharePctSum !== null): ?>
+        <div style="font-size:13px;font-weight:600;margin-bottom:.75rem;padding:.5rem .75rem;border-radius:var(--radius-sm);<?= abs($sharePctSum - 100) < 0.01 ? 'background:var(--green-lt);color:var(--green)' : 'background:var(--red-lt);color:var(--red)' ?>">
+          <?= abs($sharePctSum - 100) < 0.01 ? '✓' : '⚠' ?> Součet podílů: <?= number_format($sharePctSum, 2, ',', ' ') ?> % <?= abs($sharePctSum - 100) < 0.01 ? '' : '(mělo by být 100 %)' ?>
+        </div>
+        <?php endif; ?>
         <?php if ($ownerPersons): ?>
           <?php foreach ($ownerPersons as $p): ?>
           <div style="display:flex;justify-content:space-between;align-items:center;background:var(--gray-lt);border-radius:var(--radius-sm);padding:.5rem .75rem;margin-bottom:.5rem;font-size:13px">
