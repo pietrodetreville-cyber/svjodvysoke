@@ -188,7 +188,7 @@ include __DIR__ . '/../includes/header.php';
     <thead>
       <tr>
         <th>Jednotka</th>
-        <th>Typ</th>
+        <th style="text-align:center">Typ</th>
         <th>Jméno</th>
         <th>E-mail</th>
         <th>Telefon</th>
@@ -207,7 +207,7 @@ include __DIR__ . '/../includes/header.php';
     ?>
     <tr>
       <td><strong><?= e($t['unit_label']) ?></strong><br><small style="color:var(--muted)"><?= e($t['unit_type']) ?></small></td>
-      <td><span class="badge <?= $t['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>"><?= e($typLabels[$t['typ']] ?? $t['typ']) ?></span></td>
+      <td style="text-align:center"><span class="badge <?= $t['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>" style="text-align:center;white-space:normal;max-width:90px"><?= e($typLabels[$t['typ']] ?? $t['typ']) ?></span></td>
       <td>
         <?= e($t['full_name']) ?>
         <?php if ($t['note']): ?><br><small style="color:var(--muted)"><?= e($t['note']) ?></small><?php endif; ?>
