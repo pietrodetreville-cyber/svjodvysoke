@@ -297,45 +297,7 @@ $o = $owner ?? [];
 </form>
 </div>
 
-<div id="pronajem-box" class="card" style="display:<?= $showUsageBox ? 'block' : 'none' ?>;border-top:4px solid var(--green)">
-  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">🏠 Nájemníci / osoby s věcným břemenem</div>
-  <?php if ($unitTenants): ?>
-    <?php foreach ($unitTenants as $ut): ?>
-      <div style="font-size:13px;margin-bottom:4px">
-        <?= e($ut['full_name']) ?>
-        <span class="badge <?= $ut['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>" style="font-size:10px"><?= e($usageTypLabels[$ut['typ']] ?? $ut['typ']) ?></span>
-        <?php if ($ut['email'] || $ut['phone']): ?><span style="color:var(--muted)">— <?= e($ut['email'] ?: '') ?><?= $ut['email'] && $ut['phone'] ? ', ' : '' ?><?= e($ut['phone'] ?: '') ?></span><?php endif; ?>
-        <?php if (!empty($ut['notify_email'])): ?><span style="font-size:10px;color:var(--green)">✉️ info</span><?php endif; ?>
-        <?php if (!empty($ut['whatsapp'])): ?><span style="font-size:10px;color:var(--green)">💬 WA</span><?php endif; ?>
-      </div>
-    <?php endforeach; ?>
-    <a href="/admin/tenants.php" style="font-size:12px" class="btn btn-secondary btn-sm">Spravovat v Uživatelích jednotky</a>
-  <?php else: ?>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:.5rem" id="usage-empty-msg">Zatím žádný záznam u této jednotky.</p>
-    <?php if ($owner): ?>
-    <form method="POST">
-      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
-      <input type="hidden" name="action" value="save_tenant_inline">
-      <input type="hidden" name="t_typ" id="usage-typ-field" value="<?= ($o['residence'] ?? '') === 'věcné břemeno' ? 'vecne_bremeno' : 'najem' ?>">
-      <div class="form-row">
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Počet osob</label><input type="number" name="t_persons_count" min="1" max="20" style="max-width:100px"></div>
-      </div>
-      <div class="form-row" style="margin-top:.5rem">
-        <div class="form-group" style="margin:0"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
-        <div class="form-group" style="margin:0"><label style="font-size:11px">Telefon</label><input type="tel" name="t_phone"></div>
-      </div>
-      <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
-        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_notify_email" checked> odesílat e-mail info</label>
-        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_whatsapp"> WhatsApp</label>
-        <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
-      </div>
-    </form>
-    <?php else: ?>
-    <p style="font-size:12px;color:var(--muted)">Nejdřív uložte kartu vlastníka, pak půjde přidat záznam rovnou zde.</p>
-    <?php endif; ?>
-  <?php endif; ?>
-</div>
+<div>
 
 <?php if ($owner): ?>
 <!-- ══ DALŠÍ VLASTNÍCI (SJM / podílové) ═══════════════════════════════════ -->
@@ -454,6 +416,48 @@ $o = $owner ?? [];
   Další vlastníky (SJM / podílové) půjde přidat po uložení karty.
 </div>
 <?php endif; ?>
+
+<div id="pronajem-box" class="card" style="display:<?= $showUsageBox ? 'block' : 'none' ?>;border-top:4px solid var(--green);margin-top:1.25rem">
+  <div style="font-size:14px;font-weight:600;color:var(--green);margin-bottom:1rem">🏠 Nájemníci / osoby s věcným břemenem</div>
+  <?php if ($unitTenants): ?>
+    <?php foreach ($unitTenants as $ut): ?>
+      <div style="font-size:13px;margin-bottom:4px">
+        <?= e($ut['full_name']) ?>
+        <span class="badge <?= $ut['typ']==='vecne_bremeno' ? 'badge-partial' : 'badge-blue' ?>" style="font-size:10px"><?= e($usageTypLabels[$ut['typ']] ?? $ut['typ']) ?></span>
+        <?php if ($ut['email'] || $ut['phone']): ?><span style="color:var(--muted)">— <?= e($ut['email'] ?: '') ?><?= $ut['email'] && $ut['phone'] ? ', ' : '' ?><?= e($ut['phone'] ?: '') ?></span><?php endif; ?>
+        <?php if (!empty($ut['notify_email'])): ?><span style="font-size:10px;color:var(--green)">✉️ info</span><?php endif; ?>
+        <?php if (!empty($ut['whatsapp'])): ?><span style="font-size:10px;color:var(--green)">💬 WA</span><?php endif; ?>
+      </div>
+    <?php endforeach; ?>
+    <a href="/admin/tenants.php" style="font-size:12px" class="btn btn-secondary btn-sm">Spravovat v Uživatelích jednotky</a>
+  <?php else: ?>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:.5rem" id="usage-empty-msg">Zatím žádný záznam u této jednotky.</p>
+    <?php if ($owner): ?>
+    <form method="POST">
+      <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
+      <input type="hidden" name="action" value="save_tenant_inline">
+      <input type="hidden" name="t_typ" id="usage-typ-field" value="<?= ($o['residence'] ?? '') === 'věcné břemeno' ? 'vecne_bremeno' : 'najem' ?>">
+      <div class="form-row">
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Jméno a příjmení</label><input type="text" name="t_full_name"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Počet osob</label><input type="number" name="t_persons_count" min="1" max="20" style="max-width:100px"></div>
+      </div>
+      <div class="form-row" style="margin-top:.5rem">
+        <div class="form-group" style="margin:0"><label style="font-size:11px">E-mail</label><input type="email" name="t_email"></div>
+        <div class="form-group" style="margin:0"><label style="font-size:11px">Telefon</label><input type="tel" name="t_phone"></div>
+      </div>
+      <div style="display:flex;gap:1.25rem;align-items:center;flex-wrap:wrap;margin-top:.6rem">
+        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_notify_email" checked> odesílat e-mail info</label>
+        <label style="cursor:pointer;font-size:12px"><input type="checkbox" name="t_whatsapp"> WhatsApp</label>
+        <button type="submit" class="btn btn-primary btn-sm">Přidat</button>
+      </div>
+    </form>
+    <?php else: ?>
+    <p style="font-size:12px;color:var(--muted)">Nejdřív uložte kartu vlastníka, pak půjde přidat záznam rovnou zde.</p>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+
+</div>
 
 </div>
 
