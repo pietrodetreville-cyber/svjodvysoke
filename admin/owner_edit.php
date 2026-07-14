@@ -229,6 +229,11 @@ $o = $owner ?? [];
     </div>
   </div>
 
+  <div class="form-group">
+    <label>Korespondenční adresa (pokud se liší od jednotky)</label>
+    <input type="text" name="address" value="<?= e($o['address'] ?? '') ?>">
+  </div>
+
   <!-- Kontakty -->
   <div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;background:var(--gray-lt)">
     <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:.75rem">Kontaktní údaje</div>
@@ -247,11 +252,6 @@ $o = $owner ?? [];
       <label style="cursor:pointer"><input type="checkbox" name="notify_email" <?= !isset($o['notify_email']) || $o['notify_email'] ? 'checked' : '' ?>> Odesílat e-mail info</label>
       <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($o['whatsapp']) ? 'checked' : '' ?>> Používat pro WhatsApp</label>
     </div>
-  </div>
-
-  <div class="form-group">
-    <label>Korespondenční adresa (pokud se liší od jednotky)</label>
-    <input type="text" name="address" value="<?= e($o['address'] ?? '') ?>">
   </div>
 
   <div class="form-group">

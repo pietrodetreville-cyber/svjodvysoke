@@ -278,6 +278,7 @@ include __DIR__ . '/../includes/header.php';
             <input type="number" step="0.01" min="0" max="100" name="unit_share_pct" placeholder="50.00" value="<?= e($o['unit_share_pct'] ?? '') ?>">
           </div>
         </div>
+        <div class="form-group"><label>Korespondenční adresa</label><input type="text" name="address" value="<?= e($o['address'] ?? '') ?>"></div>
         <div class="contact-box">
           <div class="contact-box-label">Kontaktní údaje</div>
           <div class="form-group"><label>E-mail</label><input type="email" name="email" value="<?= e($o['email'] ?? '') ?>"></div>
@@ -290,7 +291,6 @@ include __DIR__ . '/../includes/header.php';
             <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($o['whatsapp']) ? 'checked' : '' ?>> Používat pro WhatsApp</label>
           </div>
         </div>
-        <div class="form-group"><label>Korespondenční adresa</label><input type="text" name="address" value="<?= e($o['address'] ?? '') ?>"></div>
         <div class="form-group"><label>Vzkaz pro výbor</label><textarea name="note" style="min-height:70px"><?= e($o['note'] ?? '') ?></textarea></div>
         <div class="check-row" style="margin-bottom:1rem">
           <input type="checkbox" id="gdpr" name="gdpr_consent" required <?= !empty($o['gdpr_consent'])?'checked':'' ?>>
