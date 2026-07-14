@@ -202,30 +202,29 @@ include __DIR__ . '/../includes/header.php';
 
 <style>
 .profile-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;align-items:start}
-.block{background:#fff;border:2px solid var(--border);border-radius:var(--radius);box-shadow:0 4px 16px rgba(0,0,0,.08);overflow:hidden}
-.block-owner{border-top:4px solid #185FA5}
-.block-tenant{border-top:4px solid #3B6D11}
-.block-garage{border-top:4px solid #854F0B}
-.block-owner .edit-form{border-top:3px solid #A8C8E8}
-.block-tenant .edit-form{border-top:3px solid #A8CC88}
+.block{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.block-owner{border-top:4px solid var(--blue)}
+.block-owner .block-label{color:var(--blue)}
+.block-tenant{border-top:4px solid var(--green)}
+.block-tenant .block-label{color:var(--green)}
+.block-garage{border-top:4px solid var(--amber)}
+.block-garage .block-label{color:var(--amber)}
 .block-header{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.25rem;cursor:default}
-.block-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.block-label{font-size:14px;font-weight:600}
 .summary-body{padding:0 1.25rem 1rem}
 .summary-val{font-size:14px;color:var(--text);margin-bottom:4px}
-.edit-form{display:none;padding:1.25rem;background:var(--gray-lt)}
+.edit-form{display:none;padding:1.25rem;border-top:1px solid var(--border);background:var(--gray-lt)}
 .edit-form.open{display:block}
-.primary-badge{font-size:10px;background:var(--blue-lt);color:var(--blue);padding:1px 6px;border-radius:99px;font-weight:600;margin-left:4px}
-.contact-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;background:#fff}
-.contact-box-label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem}
+.contact-box{border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;background:var(--card)}
+.contact-box-label{font-size:13px;font-weight:600;color:var(--muted);margin-bottom:.75rem}
 @media(max-width:700px){.profile-grid{grid-template-columns:1fr}}
 </style>
 
-<div class="page-hd">
-  <h1>Moje karta</h1>
-  <?php if ($owner): ?>
-    <span class="badge <?= $owner['status']==='úplná'?'badge-ok':($owner['status']==='neúplná'?'badge-partial':'badge-miss') ?>"><?= e($owner['status']) ?></span>
-  <?php endif; ?>
+<?php if ($owner): ?>
+<div class="page-hd" style="justify-content:flex-end">
+  <span class="badge <?= $owner['status']==='úplná'?'badge-ok':($owner['status']==='neúplná'?'badge-partial':'badge-miss') ?>"><?= e($owner['status']) ?></span>
 </div>
+<?php endif; ?>
 
 <!-- Info o jednotce -->
 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem">
@@ -235,7 +234,7 @@ include __DIR__ . '/../includes/header.php';
   </div>
   <?php endif; ?>
   <?php if ($garage): ?>
-  <div style="background:#FFF8E6;border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--amber);font-weight:500">
+  <div style="background:var(--amber-lt);border-radius:var(--radius-sm);padding:.6rem 1rem;font-size:13px;color:var(--amber);font-weight:500">
     🚗 Garáž: <strong><?= e($garage['label']) ?></strong><?= $garage['vymera_m2'] ? ' · '.$garage['vymera_m2'].' m²' : '' ?>
   </div>
   <?php endif; ?>
@@ -468,7 +467,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($unit_info && ($unit_info['dispozice'] || $unit_rooms_data || $unit_eq_data)): ?>
 <div class="block" style="border-top:4px solid var(--blue);margin-bottom:1.25rem">
   <div class="block-header" style="cursor:default">
-    <span class="block-label">🏠 Technický popis jednotky</span>
+    <span class="block-label" style="color:var(--blue)">🏠 Technický popis jednotky</span>
     <?php if ($unit_info['dispozice'] || $unit_info['vymera_m2']): ?>
     <span style="font-size:13px;color:var(--muted)">
       <?= e($unit_info['dispozice'] ?? '') ?>
@@ -526,7 +525,7 @@ include __DIR__ . '/../includes/header.php';
 <?php if ($user['unit_id']): ?>
 <div class="block" style="border-top:4px solid var(--blue);margin-bottom:1.25rem">
   <div class="block-header" style="cursor:default">
-    <span class="block-label">📊 Spotřeby</span>
+    <span class="block-label" style="color:var(--blue)">📊 Spotřeby</span>
     <?php if (count($cons_roky) > 1): ?>
     <div style="display:flex;gap:5px">
       <?php foreach (array_reverse($cons_roky) as $r): ?>
@@ -610,9 +609,9 @@ include __DIR__ . '/../includes/header.php';
 <?php endif; ?>
 
 <!-- BLOK HESLO -->
-<div class="block" style="max-width:600px;border-top:4px solid #C8C8C8;margin-bottom:1.25rem" id="block-password">
+<div class="block" style="max-width:600px;border-top:4px solid var(--gray);margin-bottom:1.25rem" id="block-password">
   <div class="block-header">
-    <span class="block-label">🔒 Změna hesla</span>
+    <span class="block-label" style="color:var(--gray)">🔒 Změna hesla</span>
     <button type="button" class="btn btn-secondary btn-sm" onclick="toggleBlock('block-password')">Změnit</button>
   </div>
   <div class="edit-form" id="edit-password">
