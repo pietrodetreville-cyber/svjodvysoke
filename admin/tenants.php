@@ -98,14 +98,18 @@ include __DIR__ . '/../includes/header.php';
 </div>
 
 <!-- Formulář -->
-<div class="card" style="max-width:680px;margin-bottom:1.5rem;border-top:4px solid var(--blue)">
+<style>
+.form-row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem}
+@media(max-width:700px){.form-row-3{grid-template-columns:1fr}}
+</style>
+<div class="card" style="margin-bottom:1.5rem;border-top:4px solid var(--blue)">
   <div style="font-size:14px;font-weight:600;color:var(--blue);margin-bottom:1rem">👤 <?= $editing ? 'Upravit uživatele' : 'Přidat uživatele' ?></div>
   <form method="POST">
     <input type="hidden" name="csrf_token" value="<?= csrfToken() ?>">
     <input type="hidden" name="action" value="<?= $editing ? 'edit' : 'add' ?>">
     <?php if ($editing): ?><input type="hidden" name="id" value="<?= $editing['id'] ?>"><?php endif; ?>
 
-    <div class="form-row">
+    <div class="form-row-3">
       <div class="form-group">
         <label>Bytová jednotka *</label>
         <select name="unit_id" required>
@@ -125,20 +129,17 @@ include __DIR__ . '/../includes/header.php';
           <?php endforeach; ?>
         </select>
       </div>
-    </div>
-
-    <div class="form-row">
-      <div class="form-group">
-        <label>Jméno a příjmení *</label>
-        <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? '') ?>">
-      </div>
       <div class="form-group">
         <label>Počet osob</label>
         <input type="number" name="persons_count" min="1" max="20" value="<?= e($editing['persons_count'] ?? '') ?>">
       </div>
     </div>
 
-    <div class="form-row">
+    <div class="form-row-3">
+      <div class="form-group">
+        <label>Jméno a příjmení *</label>
+        <input type="text" name="full_name" required value="<?= e($editing['full_name'] ?? '') ?>">
+      </div>
       <div class="form-group">
         <label>E-mail</label>
         <input type="email" name="email" value="<?= e($editing['email'] ?? '') ?>">
@@ -154,20 +155,19 @@ include __DIR__ . '/../includes/header.php';
       <label style="cursor:pointer"><input type="checkbox" name="whatsapp" <?= !empty($editing['whatsapp']) ? 'checked' : '' ?>> WhatsApp</label>
     </div>
 
-    <div class="form-row">
+    <div class="form-row-3">
       <div class="form-group">
-        <label>Nájem od</label>
+        <label>Platnost od</label>
         <input type="date" name="rent_from" value="<?= e($editing['rent_from'] ?? '') ?>">
       </div>
       <div class="form-group">
-        <label>Nájem do</label>
+        <label>Platnost do</label>
         <input type="date" name="rent_until" value="<?= e($editing['rent_until'] ?? '') ?>">
       </div>
-    </div>
-
-    <div class="form-group">
-      <label>Poznámka</label>
-      <input type="text" name="note" value="<?= e($editing['note'] ?? '') ?>">
+      <div class="form-group">
+        <label>Poznámka</label>
+        <input type="text" name="note" value="<?= e($editing['note'] ?? '') ?>">
+      </div>
     </div>
 
     <div style="display:flex;gap:8px">
